@@ -10,7 +10,7 @@ import (
 // It expects a SoftHSM2 token labeled lorica_test present and the token
 // should be initialized with user PIN 123456.
 func ExampleToken() {
-	token, err := OpenToken("/usr/lib/softhsm/libsofthsm2.so", "lorica_test", "123456")
+	token, err := OpenToken("/usr/lib/softhsm/libsofthsm2.so", "lorica_test", "123456", true)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

@@ -36,7 +36,7 @@ func findSlot(module *pkcs11.Ctx, tokenLabel string) (uint, error) {
 }
 
 // OpenToken opens a new session with the given cryptographic token.
-func OpenToken(modulePath, tokenLabel, pin string) (*Token, error) {
+func OpenToken(modulePath, tokenLabel, pin string, readOnly bool) (*Token, error) {
 	module := pkcs11.New(modulePath)
 	if module == nil {
 		return nil, fmt.Errorf("failed to load module '%s'", modulePath)
@@ -52,7 +52,13 @@ func OpenToken(modulePath, tokenLabel, pin string) (*Token, error) {
 		return nil, err
 	}
 
-	session, err := module.OpenSession(slotID, pkcs11.CKF_SERIAL_SESSION)
+	var flags uint
+	if readOnly {
+		flags = pkcs11.CKF_SERIAL_SESSION
+	} else {
+		flags = pkcs11.CKF_SERIAL_SESSION | pkcs11.CKF_RW_SESSION
+	}
+	session, err := module.OpenSession(slotID, flags)
 	if err != nil {
 		return nil, err
 	}
