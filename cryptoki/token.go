@@ -1,4 +1,4 @@
-package lorica
+package cryptoki
 
 import (
 	"crypto"
