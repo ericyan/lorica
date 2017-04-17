@@ -116,8 +116,8 @@ func (tk *Token) Info() (pkcs11.TokenInfo, error) {
 	return tokenInfo, nil
 }
 
-// Generate a key pair of the given algorithm and size inside the token.
-func (tk *Token) generateKeyPair(label, algo string, size int) (pkcs11.ObjectHandle, pkcs11.ObjectHandle, error) {
+// GenerateKeyPair generates a key pair inside the token.
+func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (pkcs11.ObjectHandle, pkcs11.ObjectHandle, error) {
 	var nilObjectHandle pkcs11.ObjectHandle
 
 	keyID := uint(crc64.Checksum([]byte(label), crc64.MakeTable(crc64.ECMA)))
@@ -149,13 +149,13 @@ func (tk *Token) generateKeyPair(label, algo string, size int) (pkcs11.ObjectHan
 	}
 
 	var mech uint
-	switch algo {
+	switch kr.Algo() {
 	case "rsa":
 		mech = pkcs11.CKM_RSA_PKCS_KEY_PAIR_GEN
 
 		// RSA public key object attributes (PKCS #11-M1 6.1.2)
 		publicKeyTemplate = append(publicKeyTemplate,
-			pkcs11.NewAttribute(pkcs11.CKA_MODULUS_BITS, size),
+			pkcs11.NewAttribute(pkcs11.CKA_MODULUS_BITS, kr.Size()),
 			pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, []byte{1, 0, 1}),
 		)
 	case "ecdsa":
@@ -163,7 +163,7 @@ func (tk *Token) generateKeyPair(label, algo string, size int) (pkcs11.ObjectHan
 
 		// Named curves (RFC 5480 2.1.1.1)
 		var curveOID asn1.ObjectIdentifier
-		switch size {
+		switch kr.Size() {
 		case 224:
 			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
 		case 256:
@@ -173,7 +173,7 @@ func (tk *Token) generateKeyPair(label, algo string, size int) (pkcs11.ObjectHan
 		case 521:
 			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 35}
 		default:
-			return nilObjectHandle, nilObjectHandle, fmt.Errorf("unknown curve: %d", size)
+			return nilObjectHandle, nilObjectHandle, fmt.Errorf("unknown curve: %d", kr.Size())
 		}
 		ecParams, err := asn1.Marshal(curveOID)
 		if err != nil {
@@ -185,7 +185,7 @@ func (tk *Token) generateKeyPair(label, algo string, size int) (pkcs11.ObjectHan
 			pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
 		)
 	default:
-		return nilObjectHandle, nilObjectHandle, fmt.Errorf("unsupported algorithm: %s", algo)
+		return nilObjectHandle, nilObjectHandle, fmt.Errorf("unsupported algorithm: %s", kr.Algo())
 	}
 
 	mechanism := []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
@@ -282,19 +282,24 @@ func (tk *Token) getECPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, e
 	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
 }
 
-// GenerateKeyPair generates a key pair inside the token. For obvious
-// reasons, only the public key will be returned.
-func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (crypto.PublicKey, error) {
-	handle, _, err := tk.generateKeyPair(label, kr.Algo(), kr.Size())
+// ExportPublicKey retrieves the public key with given object handle.
+func (tk *Token) ExportPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
+	attr, err := tk.module.GetAttributeValue(tk.session, handle, []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, false),
+	})
+	if (len(attr) == 0) || (len(attr[0].Value) == 0) {
+		err = errors.New("invalid public key object")
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate key pair: %s", err)
+		return nil, err
 	}
 
-	switch kr.Algo() {
-	case "rsa":
+	switch attr[0].Value[0] {
+	case pkcs11.CKK_RSA:
 		return tk.getRSAPublicKey(handle)
-	case "ecdsa":
+	case pkcs11.CKK_EC:
 		return tk.getECPublicKey(handle)
+	default:
+		return nil, errors.New("unknown key type")
 	}
-	return nil, fmt.Errorf("unsupported algorithm: %s", kr.Algo())
 }
