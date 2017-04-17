@@ -284,17 +284,17 @@ func (tk *Token) getECPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, e
 
 // GenerateKeyPair generates a key pair inside the token. For obvious
 // reasons, only the public key will be returned.
-func (tk *Token) GenerateKeyPair(label, algo string, size int) (crypto.PublicKey, error) {
-	handle, _, err := tk.generateKeyPair(label, algo, size)
+func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (crypto.PublicKey, error) {
+	handle, _, err := tk.generateKeyPair(label, kr.Algo(), kr.Size())
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key pair: %s", err)
 	}
 
-	switch algo {
+	switch kr.Algo() {
 	case "rsa":
 		return tk.getRSAPublicKey(handle)
 	case "ecdsa":
 		return tk.getECPublicKey(handle)
 	}
-	return nil, fmt.Errorf("unsupported algorithm: %s", algo)
+	return nil, fmt.Errorf("unsupported algorithm: %s", kr.Algo())
 }
