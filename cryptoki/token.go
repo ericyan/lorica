@@ -303,3 +303,59 @@ func (tk *Token) ExportPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, 
 		return nil, errors.New("unknown key type")
 	}
 }
+
+// Sign signs digest with the private key in token. It is the caller's
+// responsibility to compute the message digest.
+func (tk *Token) Sign(mech uint, digest []byte, key pkcs11.ObjectHandle, opts crypto.SignerOpts) (signature []byte, err error) {
+	var mechanism []*pkcs11.Mechanism
+	switch mech {
+	// The PKCS #1 v1.5 RSA mechanism	corresponds only to the part that
+	// involves RSA; it does not compute the DigestInfo, which is  a DER-
+	// serialised ASN.1 struct:
+	//
+	//	DigestInfo ::= SEQUENCE {
+	//		digestAlgorithm AlgorithmIdentifier,
+	//		digest OCTET STRING
+	//	}
+	case pkcs11.CKM_RSA_PKCS:
+		mechanism = []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
+
+		// For performance, we precompute a prefix of the digest value that
+		// makes a valid ASN.1 DER string.
+		var prefix []byte
+		switch opts.HashFunc() {
+		case crypto.MD5:
+			prefix = []byte{0x30, 0x20, 0x30, 0x0c, 0x06, 0x08, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x02, 0x05, 0x05, 0x00, 0x04, 0x10}
+		case crypto.SHA1:
+			prefix = []byte{0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14}
+		case crypto.SHA224:
+			prefix = []byte{0x30, 0x2d, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x04, 0x05, 0x00, 0x04, 0x1c}
+		case crypto.SHA256:
+			prefix = []byte{0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20}
+		case crypto.SHA384:
+			prefix = []byte{0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30}
+		case crypto.SHA512:
+			prefix = []byte{0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40}
+		default:
+			return nil, errors.New("unsupported hash function")
+		}
+		digest = append(prefix, digest...)
+
+	case pkcs11.CKM_RSA_PKCS_PSS:
+		// TODO: Support the PKCS #1 RSA PSS mechanism.
+		return nil, errors.New("mechanism not available")
+
+	// The ECDSA (without hashing) mechanism does not have a parameter.
+	case pkcs11.CKM_ECDSA:
+		mechanism = []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
+	default:
+		return nil, errors.New("unsupported mechanism")
+	}
+
+	err = tk.module.SignInit(tk.session, mechanism, key)
+	if err != nil {
+		return nil, fmt.Errorf("sign init error: %s", err)
+	}
+
+	return tk.module.Sign(tk.session, digest)
+}
