@@ -101,3 +101,19 @@ func NewKeyPair(tk *Token, label string, kr KeyRequest) (*KeyPair, error) {
 
 	return &KeyPair{tk, pub, pubHandle, privHandle}, nil
 }
+
+// FindKeyPair looks up the key pair inside the token with matching
+// public key.
+func FindKeyPair(tk *Token, pub crypto.PublicKey) (*KeyPair, error) {
+	pubHandle, err := tk.findPublicKey(pub)
+	if err != nil {
+		return nil, err
+	}
+
+	privHandle, err := tk.findPrivateKey(pubHandle)
+	if err != nil {
+		return nil, err
+	}
+
+	return &KeyPair{tk, pub, pubHandle, privHandle}, nil
+}

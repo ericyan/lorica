@@ -359,3 +359,105 @@ func (tk *Token) Sign(mech uint, digest []byte, key pkcs11.ObjectHandle, opts cr
 
 	return tk.module.Sign(tk.session, digest)
 }
+
+// findObject finds an object in the token matching a template. An error
+// will be returned if there is not exactly one result, or if there was
+// an error during the find calls.
+func (tk *Token) findObject(template []*pkcs11.Attribute) (pkcs11.ObjectHandle, error) {
+	err := tk.module.FindObjectsInit(tk.session, template)
+	if err != nil {
+		return 0, err
+	}
+
+	objects, moreAvailable, err := tk.module.FindObjects(tk.session, 1)
+	if err != nil {
+		return 0, err
+	}
+	if moreAvailable {
+		return 0, errors.New("more than one object found")
+	}
+
+	err = tk.module.FindObjectsFinal(tk.session)
+	if err != nil {
+		return 0, err
+	}
+	if len(objects) == 0 {
+		return 0, errors.New("no objects found")
+	}
+
+	return objects[0], nil
+}
+
+// findPublicKey looks up the given public key in the token, and returns
+// its object handle.
+func (tk *Token) findPublicKey(pub crypto.PublicKey) (pkcs11.ObjectHandle, error) {
+	var template []*pkcs11.Attribute
+	switch key := pub.(type) {
+	case *rsa.PublicKey:
+		template = []*pkcs11.Attribute{
+			pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
+			pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
+			pkcs11.NewAttribute(pkcs11.CKA_MODULUS, key.N.Bytes()),
+			pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, big.NewInt(int64(key.E)).Bytes()),
+		}
+	case *ecdsa.PublicKey:
+		// CKA_EC_PARAMS is DER-encoding of an ANSI X9.62 Parameters value
+		var curveOID asn1.ObjectIdentifier
+		switch key.Curve {
+		case elliptic.P224():
+			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
+		case elliptic.P256():
+			curveOID = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}
+		case elliptic.P384():
+			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 34}
+		case elliptic.P521():
+			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 35}
+		default:
+			return 0, errors.New("unknown elliptic curve")
+		}
+		ecParams, err := asn1.Marshal(curveOID)
+		if err != nil {
+			return 0, err
+		}
+
+		// CKA_EC_POINT is DER-encoding of ANSI X9.62 ECPoint value Q
+		ecPoint, err := asn1.Marshal(asn1.RawValue{
+			Tag:   asn1.TagOctetString,
+			Bytes: elliptic.Marshal(key.Curve, key.X, key.Y),
+		})
+		if err != nil {
+			return 0, err
+		}
+
+		template = []*pkcs11.Attribute{
+			pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
+			pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_EC),
+			pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
+			pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, ecPoint),
+		}
+	default:
+		return 0, fmt.Errorf("unsupported public key of type %T", pub)
+	}
+
+	return tk.findObject(template)
+}
+
+// findPrivateKey looks up the private key with matching CKA_ID of the
+// given public key handle.
+func (tk *Token) findPrivateKey(pubHandle pkcs11.ObjectHandle) (pkcs11.ObjectHandle, error) {
+	attrs, err := tk.module.GetAttributeValue(tk.session, pubHandle, []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_ID, nil),
+	})
+	if err != nil {
+		return 0, err
+	}
+	if len(attrs) == 0 || attrs[0].Type != pkcs11.CKA_ID {
+		return 0, errors.New("invalid attribute value")
+	}
+	publicKeyID := attrs[0].Value
+
+	return tk.findObject([]*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, publicKeyID),
+	})
+}
