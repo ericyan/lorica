@@ -2,7 +2,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/ericyan/lorica/cryptoki"
@@ -11,6 +13,7 @@ import (
 func main() {
 	commands := map[string]func(*cryptoki.Token, []string){
 		"info": infoCommand,
+		"init": initCommand,
 	}
 
 	if len(os.Args) < 2 {
@@ -32,7 +35,8 @@ func main() {
 		os.Exit(2)
 	}
 
-	token, err := cryptoki.OpenToken(module, label, pin, true)
+	// TODO: Should use read-only session for read-only operations
+	token, err := cryptoki.OpenToken(module, label, pin, false)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -40,4 +44,23 @@ func main() {
 	defer token.Close()
 
 	cmd(token, os.Args[2:])
+}
+
+// readFile reads the file named by filename and returns the contents.
+// It reads from stdin if the file is "-".
+func readFile(filename string) ([]byte, error) {
+	switch filename {
+	case "":
+		return nil, errors.New("missing filename")
+	case "-":
+		return ioutil.ReadAll(os.Stdin)
+	default:
+		return ioutil.ReadFile(filename)
+	}
+}
+
+// writeFile writes data to a file named by filename. If the file does
+// not exist, WriteFile creates it with permissions 0644.
+func writeFile(filename string, data []byte) error {
+	return ioutil.WriteFile(filename, data, 0644)
 }
