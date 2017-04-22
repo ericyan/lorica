@@ -14,6 +14,7 @@ func main() {
 	commands := map[string]func(*cryptoki.Token, []string){
 		"info": infoCommand,
 		"init": initCommand,
+		"sign": signCommand,
 	}
 
 	if len(os.Args) < 2 {
