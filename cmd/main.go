@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/cloudflare/cfssl/log"
 	"github.com/ericyan/lorica/cryptoki"
 )
 
@@ -39,8 +40,7 @@ func main() {
 	// TODO: Should use read-only session for read-only operations
 	token, err := cryptoki.OpenToken(module, label, pin, false)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 	defer token.Close()
 

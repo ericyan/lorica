@@ -2,16 +2,15 @@ package main
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/cloudflare/cfssl/log"
 	"github.com/ericyan/lorica/cryptoki"
 )
 
 func infoCommand(tk *cryptoki.Token, args []string) {
 	info, err := tk.Info()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	fmt.Printf("Token label:\t%s\n", info.Label)
