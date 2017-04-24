@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cfssl/csr"
-	"github.com/cloudflare/cfssl/initca"
+	"github.com/ericyan/lorica"
 	"github.com/ericyan/lorica/cryptoki"
 )
 
@@ -24,26 +24,37 @@ func initCommand(tk *cryptoki.Token, args []string) {
 		os.Exit(1)
 	}
 
-	csr := csr.New()
-	err = json.Unmarshal(csrJSON, csr)
+	req := csr.New()
+	err = json.Unmarshal(csrJSON, req)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	key, err := cryptoki.NewKeyPair(tk, csr.CN, csr.KeyRequest)
+	key, err := cryptoki.NewKeyPair(tk, req.CN, req.KeyRequest)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	certPEM, csrPEM, err := initca.NewFromSigner(csr, key)
+	csrPEM, err := csr.Generate(key, req)
 	if err != nil {
-		fmt.Println(err)
 		os.Exit(1)
 	}
 
 	if *selfsign {
+		ca, err := lorica.NewCA(nil, nil, key)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		certPEM, err := ca.Sign(csrPEM)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
 		certPEMFilename := strings.Replace(csrFilename, ".json", ".pem", 1)
 		err = writeFile(certPEMFilename, certPEM)
 	} else {
