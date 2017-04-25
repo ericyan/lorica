@@ -13,7 +13,14 @@ import (
 func signCommand(tk *cryptoki.Token, args []string) {
 	flags := flag.NewFlagSet("init", flag.ExitOnError)
 	caFilename := flags.String("ca", "", "certificate of the signing CA")
+	verbose := flags.Bool("v", false, "increase verbosity")
 	flags.Parse(args)
+
+	if *verbose {
+		log.Level = log.LevelDebug
+	} else {
+		log.Level = log.LevelInfo
+	}
 
 	caPEM, err := readFile(*caFilename)
 	if err != nil {

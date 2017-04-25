@@ -14,7 +14,14 @@ import (
 func initCommand(tk *cryptoki.Token, args []string) {
 	flags := flag.NewFlagSet("init", flag.ExitOnError)
 	selfsign := flags.Bool("selfsign", false, "self-sign the CSR and output the signed certificate")
+	verbose := flags.Bool("v", false, "increase verbosity")
 	flags.Parse(args)
+
+	if *verbose {
+		log.Level = log.LevelDebug
+	} else {
+		log.Level = log.LevelInfo
+	}
 
 	csrFilename := flags.Arg(0)
 	csrJSON, err := readFile(csrFilename)
