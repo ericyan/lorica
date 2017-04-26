@@ -14,6 +14,7 @@ import (
 func initCommand(tk *cryptoki.Token, args []string) {
 	flags := flag.NewFlagSet("init", flag.ExitOnError)
 	selfsign := flags.Bool("selfsign", false, "self-sign the CSR and output the signed certificate")
+	config := flags.String("config", "", "path to configuration file")
 	verbose := flags.Bool("v", false, "increase verbosity")
 	flags.Parse(args)
 
@@ -21,6 +22,15 @@ func initCommand(tk *cryptoki.Token, args []string) {
 		log.Level = log.LevelDebug
 	} else {
 		log.Level = log.LevelInfo
+	}
+
+	var cfg *lorica.Config
+	if *config != "" {
+		var err error
+		cfg, err = lorica.LoadConfigFile(*config)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	csrFilename := flags.Arg(0)
@@ -46,7 +56,7 @@ func initCommand(tk *cryptoki.Token, args []string) {
 	}
 
 	if *selfsign {
-		ca, err := lorica.NewCA(nil, nil, key)
+		ca, err := lorica.NewCA(nil, cfg, key)
 		if err != nil {
 			log.Fatal(err)
 		}

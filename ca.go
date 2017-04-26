@@ -33,10 +33,11 @@ func (ca *CA) Sign(csrPEM []byte) ([]byte, error) {
 // NewCA returns a new CA. If the CA does not have a certificate yet,
 // set cert to nil. The default CA policy will be used if policy is set
 // to nil.
-func NewCA(cert *x509.Certificate, policy *config.Signing, key *cryptoki.KeyPair) (*CA, error) {
-	if policy == nil {
-		policy = &config.Signing{Default: DefaultProfile}
+func NewCA(cert *x509.Certificate, cfg *Config, key *cryptoki.KeyPair) (*CA, error) {
+	profile := DefaultProfile
+	if cfg != nil {
+		profile = cfg.Profile
 	}
 
-	return &CA{cert, policy, key}, nil
+	return &CA{cert, &config.Signing{Default: profile}, key}, nil
 }

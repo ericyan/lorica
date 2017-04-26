@@ -13,6 +13,7 @@ import (
 func signCommand(tk *cryptoki.Token, args []string) {
 	flags := flag.NewFlagSet("init", flag.ExitOnError)
 	caFilename := flags.String("ca", "", "certificate of the signing CA")
+	config := flags.String("config", "", "path to configuration file")
 	verbose := flags.Bool("v", false, "increase verbosity")
 	flags.Parse(args)
 
@@ -20,6 +21,15 @@ func signCommand(tk *cryptoki.Token, args []string) {
 		log.Level = log.LevelDebug
 	} else {
 		log.Level = log.LevelInfo
+	}
+
+	var cfg *lorica.Config
+	if *config != "" {
+		var err error
+		cfg, err = lorica.LoadConfigFile(*config)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	caPEM, err := readFile(*caFilename)
@@ -36,7 +46,7 @@ func signCommand(tk *cryptoki.Token, args []string) {
 		log.Fatal(err)
 	}
 
-	ca, err := lorica.NewCA(caCert, nil, key)
+	ca, err := lorica.NewCA(caCert, cfg, key)
 	if err != nil {
 		log.Fatal(err)
 	}
