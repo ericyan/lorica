@@ -62,7 +62,7 @@ func signCommand(tk *cryptoki.Token, args []string) {
 		log.Fatal(err)
 	}
 
-	certPEMFilename := strings.TrimSuffix(csrFilename, ".pem") + ".cert.pem"
+	certPEMFilename := strings.TrimSuffix(csrFilename, ".csr.pem") + ".crt.pem"
 	err = writeFile(certPEMFilename, certPEM)
 	if err != nil {
 		log.Fatal(err)

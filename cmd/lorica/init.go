@@ -66,10 +66,10 @@ func initCommand(tk *cryptoki.Token, args []string) {
 			log.Fatal(err)
 		}
 
-		certPEMFilename := strings.Replace(csrFilename, ".json", ".pem", 1)
+		certPEMFilename := strings.Replace(csrFilename, ".csr.json", ".crt.pem", 1)
 		err = writeFile(certPEMFilename, certPEM)
 	} else {
-		csrPEMFilename := strings.Replace(csrFilename, ".json", ".csr.pem", 1)
+		csrPEMFilename := strings.Replace(csrFilename, ".csr.json", ".csr.pem", 1)
 		err = writeFile(csrPEMFilename, csrPEM)
 	}
 	if err != nil {
