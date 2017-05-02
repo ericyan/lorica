@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"strings"
 
 	"github.com/cloudflare/cfssl/helpers"
@@ -12,28 +11,7 @@ import (
 )
 
 func signCommand(tk *cryptoki.Token, args []string) {
-	flags := flag.NewFlagSet("init", flag.ExitOnError)
-	caFilename := flags.String("ca", "", "certificate of the signing CA")
-	config := flags.String("config", "", "path to configuration file")
-	verbose := flags.Bool("v", false, "increase verbosity")
-	flags.Parse(args)
-
-	if *verbose {
-		log.Level = log.LevelDebug
-	} else {
-		log.Level = log.LevelInfo
-	}
-
-	var cfg *lorica.Config
-	if *config != "" {
-		var err error
-		cfg, err = lorica.LoadConfigFile(*config)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	caPEM, err := cmd.ReadFile(*caFilename)
+	caPEM, err := cmd.ReadFile(opts.ca)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,7 +30,7 @@ func signCommand(tk *cryptoki.Token, args []string) {
 		log.Fatal(err)
 	}
 
-	csrFilename := flags.Arg(0)
+	csrFilename := args[0]
 	csrPEM, err := cmd.ReadFile(csrFilename)
 	if err != nil {
 		log.Fatal(err)
