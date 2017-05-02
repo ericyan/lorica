@@ -2,9 +2,7 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/cloudflare/cfssl/log"
@@ -45,23 +43,4 @@ func main() {
 	defer token.Close()
 
 	cmd(token, os.Args[2:])
-}
-
-// readFile reads the file named by filename and returns the contents.
-// It reads from stdin if the file is "-".
-func readFile(filename string) ([]byte, error) {
-	switch filename {
-	case "":
-		return nil, errors.New("missing filename")
-	case "-":
-		return ioutil.ReadAll(os.Stdin)
-	default:
-		return ioutil.ReadFile(filename)
-	}
-}
-
-// writeFile writes data to a file named by filename. If the file does
-// not exist, WriteFile creates it with permissions 0644.
-func writeFile(filename string, data []byte) error {
-	return ioutil.WriteFile(filename, data, 0644)
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/cloudflare/cfssl/helpers"
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ericyan/lorica"
+	"github.com/ericyan/lorica/cmd"
 	"github.com/ericyan/lorica/cryptoki"
 )
 
@@ -32,7 +33,7 @@ func signCommand(tk *cryptoki.Token, args []string) {
 		}
 	}
 
-	caPEM, err := readFile(*caFilename)
+	caPEM, err := cmd.ReadFile(*caFilename)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func signCommand(tk *cryptoki.Token, args []string) {
 	}
 
 	csrFilename := flags.Arg(0)
-	csrPEM, err := readFile(csrFilename)
+	csrPEM, err := cmd.ReadFile(csrFilename)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -63,7 +64,7 @@ func signCommand(tk *cryptoki.Token, args []string) {
 	}
 
 	certPEMFilename := strings.TrimSuffix(csrFilename, ".csr.pem") + ".crt.pem"
-	err = writeFile(certPEMFilename, certPEM)
+	err = cmd.WriteFile(certPEMFilename, certPEM)
 	if err != nil {
 		log.Fatal(err)
 	}

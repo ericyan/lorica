@@ -8,6 +8,7 @@ import (
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ericyan/lorica"
+	"github.com/ericyan/lorica/cmd"
 	"github.com/ericyan/lorica/cryptoki"
 )
 
@@ -34,7 +35,7 @@ func initCommand(tk *cryptoki.Token, args []string) {
 	}
 
 	csrFilename := flags.Arg(0)
-	csrJSON, err := readFile(csrFilename)
+	csrJSON, err := cmd.ReadFile(csrFilename)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,10 +68,10 @@ func initCommand(tk *cryptoki.Token, args []string) {
 		}
 
 		certPEMFilename := strings.Replace(csrFilename, ".csr.json", ".crt.pem", 1)
-		err = writeFile(certPEMFilename, certPEM)
+		err = cmd.WriteFile(certPEMFilename, certPEM)
 	} else {
 		csrPEMFilename := strings.Replace(csrFilename, ".csr.json", ".csr.pem", 1)
-		err = writeFile(csrPEMFilename, csrPEM)
+		err = cmd.WriteFile(csrPEMFilename, csrPEM)
 	}
 	if err != nil {
 		log.Fatal(err)
