@@ -7,7 +7,13 @@ import (
 	"github.com/ericyan/lorica/cryptoki"
 )
 
-func infoCommand(tk *cryptoki.Token, args []string) {
+func infoCommand(args []string) {
+	tk, err := cryptoki.OpenToken(opts.module, opts.label, opts.pin, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tk.Close()
+
 	info, err := tk.Info()
 	if err != nil {
 		log.Fatal(err)

@@ -11,7 +11,13 @@ import (
 	"github.com/ericyan/lorica/cryptoki"
 )
 
-func initCommand(tk *cryptoki.Token, args []string) {
+func initCommand(args []string) {
+	tk, err := cryptoki.OpenToken(opts.module, opts.label, opts.pin, false)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tk.Close()
+
 	csrFilename := args[0]
 	csrJSON, err := cmd.ReadFile(csrFilename)
 	if err != nil {

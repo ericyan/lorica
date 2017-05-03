@@ -10,7 +10,13 @@ import (
 	"github.com/ericyan/lorica/cryptoki"
 )
 
-func signCommand(tk *cryptoki.Token, args []string) {
+func signCommand(args []string) {
+	tk, err := cryptoki.OpenToken(opts.module, opts.label, opts.pin, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tk.Close()
+
 	caPEM, err := cmd.ReadFile(opts.ca)
 	if err != nil {
 		log.Fatal(err)

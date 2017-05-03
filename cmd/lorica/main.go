@@ -8,11 +8,13 @@ import (
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ericyan/lorica"
-	"github.com/ericyan/lorica/cryptoki"
 )
 
 var flags = flag.NewFlagSet("lorica", flag.ExitOnError)
 var opts struct {
+	module   string
+	label    string
+	pin      string
 	config   string
 	ca       string
 	selfsign bool
@@ -28,7 +30,7 @@ func init() {
 }
 
 func main() {
-	commands := map[string]func(*cryptoki.Token, []string){
+	commands := map[string]func([]string){
 		"info": infoCommand,
 		"init": initCommand,
 		"sign": signCommand,
@@ -45,10 +47,10 @@ func main() {
 		os.Exit(2)
 	}
 
-	module := os.Getenv("LORICA_TOKEN_MODULE")
-	label := os.Getenv("LORICA_TOKEN_LABEL")
-	pin := os.Getenv("LORICA_TOKEN_PIN")
-	if module == "" || label == "" || pin == "" {
+	opts.module = os.Getenv("LORICA_TOKEN_MODULE")
+	opts.label = os.Getenv("LORICA_TOKEN_LABEL")
+	opts.pin = os.Getenv("LORICA_TOKEN_PIN")
+	if opts.module == "" || opts.label == "" || opts.pin == "" {
 		fmt.Printf("missing token env\n")
 		os.Exit(2)
 	}
@@ -69,12 +71,5 @@ func main() {
 		}
 	}
 
-	// TODO: Should use read-only session for read-only operations
-	token, err := cryptoki.OpenToken(module, label, pin, false)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer token.Close()
-
-	cmd(token, flags.Args())
+	cmd(flags.Args())
 }
