@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ericyan/lorica"
+	"github.com/joho/godotenv"
 )
 
 var flags = flag.NewFlagSet("lorica", flag.ExitOnError)
@@ -47,6 +48,7 @@ func main() {
 		os.Exit(2)
 	}
 
+	godotenv.Load()
 	opts.module = os.Getenv("LORICA_TOKEN_MODULE")
 	opts.label = os.Getenv("LORICA_TOKEN_LABEL")
 	opts.pin = os.Getenv("LORICA_TOKEN_PIN")
