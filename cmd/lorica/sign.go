@@ -5,9 +5,9 @@ import (
 
 	"github.com/cloudflare/cfssl/helpers"
 	"github.com/cloudflare/cfssl/log"
-	"github.com/ericyan/lorica"
 	"github.com/ericyan/lorica/cmd"
 	"github.com/ericyan/lorica/cryptoki"
+	"github.com/ericyan/lorica/internal/ca"
 )
 
 func signCommand(args []string) {
@@ -31,7 +31,7 @@ func signCommand(args []string) {
 		log.Fatal(err)
 	}
 
-	ca, err := lorica.NewCA(caCert, cfg, key)
+	ca, err := ca.New(caCert, cfg, key)
 	if err != nil {
 		log.Fatal(err)
 	}

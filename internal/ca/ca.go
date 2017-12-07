@@ -1,4 +1,4 @@
-package lorica
+package ca
 
 import (
 	"crypto/x509"
@@ -30,10 +30,10 @@ func (ca *CA) Sign(csrPEM []byte) ([]byte, error) {
 	return s.Sign(req)
 }
 
-// NewCA returns a new CA. If the CA does not have a certificate yet,
+// New returns a new CA. If the CA does not have a certificate yet,
 // set cert to nil. The default CA policy will be used if policy is set
 // to nil.
-func NewCA(cert *x509.Certificate, cfg *Config, key *cryptoki.KeyPair) (*CA, error) {
+func New(cert *x509.Certificate, cfg *Config, key *cryptoki.KeyPair) (*CA, error) {
 	profile := DefaultProfile
 	if cfg != nil {
 		profile = cfg.Profile

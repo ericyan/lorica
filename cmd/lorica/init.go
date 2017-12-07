@@ -6,9 +6,9 @@ import (
 
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/cloudflare/cfssl/log"
-	"github.com/ericyan/lorica"
 	"github.com/ericyan/lorica/cmd"
 	"github.com/ericyan/lorica/cryptoki"
+	"github.com/ericyan/lorica/internal/ca"
 )
 
 func initCommand(args []string) {
@@ -41,7 +41,7 @@ func initCommand(args []string) {
 	}
 
 	if opts.selfsign {
-		ca, err := lorica.NewCA(nil, cfg, key)
+		ca, err := ca.New(nil, cfg, key)
 		if err != nil {
 			log.Fatal(err)
 		}

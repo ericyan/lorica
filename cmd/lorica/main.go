@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/cloudflare/cfssl/log"
-	"github.com/ericyan/lorica"
+	"github.com/ericyan/lorica/internal/ca"
 	"github.com/joho/godotenv"
 )
 
@@ -21,7 +21,7 @@ var opts struct {
 	selfsign bool
 	verbose  bool
 }
-var cfg *lorica.Config
+var cfg *ca.Config
 
 func init() {
 	flags.StringVar(&opts.config, "config", "", "path to configuration file")
@@ -67,7 +67,7 @@ func main() {
 
 	if opts.config != "" {
 		var err error
-		cfg, err = lorica.LoadConfigFile(opts.config)
+		cfg, err = ca.LoadConfigFile(opts.config)
 		if err != nil {
 			log.Fatal(err)
 		}
