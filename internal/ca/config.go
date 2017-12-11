@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"regexp"
 	"time"
 
@@ -27,17 +26,11 @@ var DefaultProfile = &config.SigningProfile{
 	CAConstraint: config.CAConstraint{IsCA: true},
 }
 
-// LoadConfigFile attempts to load the configuration file at given path
-// and returns the parsed configuration information.
-func LoadConfigFile(path string) (*Config, error) {
-	log.Debugf("loading configuration file from %s", path)
-	file, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, errors.New("unable to read configuration file")
-	}
-
+// LoadConfig attempts to load the configuration from a byte slice. On
+// error, it returns nil.
+func LoadConfig(data []byte) (*Config, error) {
 	var cfg = &Config{}
-	err = json.Unmarshal(file, &cfg)
+	err := json.Unmarshal(data, &cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal configuration: %s", err.Error())
 	}

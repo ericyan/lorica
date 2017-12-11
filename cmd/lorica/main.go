@@ -4,6 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/cloudflare/cfssl/log"
@@ -66,8 +67,13 @@ func main() {
 	}
 
 	if opts.config != "" {
-		var err error
-		cfg, err = ca.LoadConfigFile(opts.config)
+		log.Debugf("loading configuration file from %s", opts.config)
+		config, err := ioutil.ReadFile(opts.config)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		cfg, err = ca.LoadConfig(config)
 		if err != nil {
 			log.Fatal(err)
 		}
