@@ -2,13 +2,19 @@ package ca
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/cloudflare/cfssl/config"
+	"github.com/cloudflare/cfssl/csr"
 )
 
 // Config stores configuration information for the CA.
 type Config struct {
+	CN         string
+	Names      []csr.Name           `json:"names"`
+	KeyRequest *csr.BasicKeyRequest `json:"key"`
+
 	Usage        []string            `json:"usages"`
 	ExpiryString string              `json:"expiry"`
 	CAConstraint config.CAConstraint `json:"ca_constraint"`
@@ -16,6 +22,7 @@ type Config struct {
 
 // DefaultConfig defines the default configuration for a CA.
 var DefaultConfig = &Config{
+	KeyRequest:   &csr.BasicKeyRequest{"rsa", 4096},
 	Usage:        []string{"cert sign", "crl sign"},
 	ExpiryString: "43800h",
 	CAConstraint: config.CAConstraint{IsCA: true},
@@ -30,6 +37,12 @@ func LoadConfig(data []byte) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal configuration: %s", err.Error())
 	}
 
+	if cfg.CN == "" {
+		return nil, errors.New("empty common name in CA config")
+	}
+	if cfg.KeyRequest == nil {
+		cfg.KeyRequest = DefaultConfig.KeyRequest
+	}
 	if len(cfg.Usage) > 0 {
 		cfg.Usage = DefaultConfig.Usage
 	}
@@ -64,4 +77,13 @@ func (cfg *Config) Signing() (*config.Signing, error) {
 	}
 
 	return cfsslConfig.Signing, nil
+}
+
+// CertificateRequest returns a CFSSL certificate request for the CA.
+func (cfg *Config) CertificateRequest() *csr.CertificateRequest {
+	return &csr.CertificateRequest{
+		CN:         cfg.CN,
+		Names:      cfg.Names,
+		KeyRequest: cfg.KeyRequest,
+	}
 }

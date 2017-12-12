@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/cloudflare/cfssl/csr"
@@ -18,18 +17,7 @@ func initCommand(args []string) {
 	}
 	defer tk.Close()
 
-	csrFilename := args[0]
-	csrJSON, err := cmd.ReadFile(csrFilename)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	req := csr.New()
-	err = json.Unmarshal(csrJSON, req)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	req := cfg.CertificateRequest()
 	key, err := cryptoki.NewKeyPair(tk, req.CN, req.KeyRequest)
 	if err != nil {
 		log.Fatal(err)
@@ -51,10 +39,10 @@ func initCommand(args []string) {
 			log.Fatal(err)
 		}
 
-		certPEMFilename := strings.Replace(csrFilename, ".csr.json", ".crt.pem", 1)
+		certPEMFilename := strings.Replace(opts.config, ".json", ".crt.pem", 1)
 		err = cmd.WriteFile(certPEMFilename, certPEM)
 	} else {
-		csrPEMFilename := strings.Replace(csrFilename, ".csr.json", ".csr.pem", 1)
+		csrPEMFilename := strings.Replace(opts.config, ".json", ".csr.pem", 1)
 		err = cmd.WriteFile(csrPEMFilename, csrPEM)
 	}
 	if err != nil {
