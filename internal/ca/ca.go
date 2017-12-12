@@ -34,10 +34,10 @@ func (ca *CA) Sign(csrPEM []byte) ([]byte, error) {
 // set cert to nil. The default CA policy will be used if policy is set
 // to nil.
 func New(cert *x509.Certificate, cfg *Config, key *cryptoki.KeyPair) (*CA, error) {
-	profile := DefaultProfile
-	if cfg != nil {
-		profile = cfg.Profile
+	signing, err := cfg.Signing()
+	if err != nil {
+		return nil, err
 	}
 
-	return &CA{cert, &config.Signing{Default: profile}, key}, nil
+	return &CA{cert, signing, key}, nil
 }

@@ -1,28 +1,23 @@
 package ca
 
 import (
-	"encoding/asn1"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"regexp"
-	"time"
 
 	"github.com/cloudflare/cfssl/config"
-	"github.com/cloudflare/cfssl/helpers"
-	"github.com/cloudflare/cfssl/log"
 )
 
 // Config stores configuration information for the CA.
 type Config struct {
-	Profile *config.SigningProfile `json:"profile"`
+	Usage        []string            `json:"usages"`
+	ExpiryString string              `json:"expiry"`
+	CAConstraint config.CAConstraint `json:"ca_constraint"`
 }
 
-// DefaultProfile defines the default signing profile for a root CA.
-var DefaultProfile = &config.SigningProfile{
+// DefaultConfig defines the default configuration for a CA.
+var DefaultConfig = &Config{
 	Usage:        []string{"cert sign", "crl sign"},
 	ExpiryString: "43800h",
-	Expiry:       5 * helpers.OneYear,
 	CAConstraint: config.CAConstraint{IsCA: true},
 }
 
@@ -35,87 +30,38 @@ func LoadConfig(data []byte) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal configuration: %s", err.Error())
 	}
 
-	if cfg.Profile == nil {
-		log.Warning("no profile given: using default profile")
-		cfg.Profile = DefaultProfile
+	if len(cfg.Usage) > 0 {
+		cfg.Usage = DefaultConfig.Usage
 	}
-	if cfg.Profile.AuthKeyName != "" {
-		log.Warning("ignored unsupported field: auth_key")
-		cfg.Profile.AuthKeyName = ""
-	}
-	if cfg.Profile.RemoteName != "" {
-		log.Warning("ignored unsupported field: remote")
-		cfg.Profile.RemoteName = ""
-	}
-	if cfg.Profile.AuthRemote.RemoteName != "" || cfg.Profile.AuthRemote.AuthKeyName != "" {
-		log.Warning("ignored unsupported field: auth_remote")
-		cfg.Profile.AuthRemote.RemoteName = ""
-		cfg.Profile.AuthRemote.AuthKeyName = ""
-	}
-	if err := populateProfile(cfg.Profile); err != nil {
-		return nil, err
+	if cfg.ExpiryString == "" {
+		cfg.ExpiryString = DefaultConfig.ExpiryString
 	}
 
-	p := &config.Signing{Default: cfg.Profile}
-	if !p.Valid() {
-		return nil, errors.New("invalid configuration")
-	}
-
-	log.Debugf("configuration loaded successfully")
 	return cfg, nil
 }
 
-// populateProfile fills in profile fields that are not in JSON.
-func populateProfile(p *config.SigningProfile) error {
-	log.Debugf("parse expiry in profile")
-	if p.ExpiryString == "" {
-		return errors.New("empty expiry string")
+// Signing returns a CFSSL signing policy derived from the Config.
+func (cfg *Config) Signing() (*config.Signing, error) {
+	cfsslConfig := &config.Config{
+		Signing: &config.Signing{
+			Default: &config.SigningProfile{
+				Usage:        cfg.Usage,
+				ExpiryString: cfg.ExpiryString,
+				CAConstraint: cfg.CAConstraint,
+			},
+		},
 	}
 
-	dur, err := time.ParseDuration(p.ExpiryString)
+	// CFSSL config.LoadConfig will call the private function populate()
+	// for each signing profile.
+	buf, err := json.Marshal(cfsslConfig)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	cfsslConfig, err = config.LoadConfig(buf)
+	if err != nil {
+		return nil, err
 	}
 
-	log.Debugf("expiry is valid")
-	p.Expiry = dur
-
-	if p.BackdateString != "" {
-		dur, err = time.ParseDuration(p.BackdateString)
-		if err != nil {
-			return err
-		}
-
-		p.Backdate = dur
-	}
-
-	if !p.NotBefore.IsZero() && !p.NotAfter.IsZero() && p.NotAfter.Before(p.NotBefore) {
-		return err
-	}
-
-	if len(p.Policies) > 0 {
-		for _, policy := range p.Policies {
-			for _, qualifier := range policy.Qualifiers {
-				if qualifier.Type != "" && qualifier.Type != "id-qt-unotice" && qualifier.Type != "id-qt-cps" {
-					return errors.New("invalid policy qualifier type")
-				}
-			}
-		}
-	}
-
-	if p.NameWhitelistString != "" {
-		log.Debug("compiling whitelist regular expression")
-		rule, err := regexp.Compile(p.NameWhitelistString)
-		if err != nil {
-			return errors.New("failed to compile name whitelist section")
-		}
-		p.NameWhitelist = rule
-	}
-
-	p.ExtensionWhitelist = map[string]bool{}
-	for _, oid := range p.AllowedExtensions {
-		p.ExtensionWhitelist[asn1.ObjectIdentifier(oid).String()] = true
-	}
-
-	return nil
+	return cfsslConfig.Signing, nil
 }
