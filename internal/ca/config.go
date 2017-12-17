@@ -12,7 +12,7 @@ import (
 // Config stores configuration information for the CA.
 type Config struct {
 	CN         string
-	Names      []csr.Name           `json:"names"`
+	Name       csr.Name             `json:"name"`
 	KeyRequest *csr.BasicKeyRequest `json:"key"`
 
 	Usage        []string            `json:"usages"`
@@ -83,7 +83,7 @@ func (cfg *Config) Signing() (*config.Signing, error) {
 func (cfg *Config) CertificateRequest() *csr.CertificateRequest {
 	return &csr.CertificateRequest{
 		CN:         cfg.CN,
-		Names:      cfg.Names,
+		Names:      []csr.Name{cfg.Name},
 		KeyRequest: cfg.KeyRequest,
 	}
 }
