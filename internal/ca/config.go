@@ -25,7 +25,6 @@ var DefaultConfig = &Config{
 	KeyRequest:   &csr.BasicKeyRequest{"rsa", 4096},
 	Usage:        []string{"cert sign", "crl sign"},
 	ExpiryString: "43800h",
-	CAConstraint: config.CAConstraint{IsCA: true},
 }
 
 // LoadConfig attempts to load the configuration from a byte slice. On
