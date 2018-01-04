@@ -42,7 +42,7 @@ func LoadConfig(data []byte) (*Config, error) {
 	if cfg.KeyRequest == nil {
 		cfg.KeyRequest = DefaultConfig.KeyRequest
 	}
-	if len(cfg.Usage) > 0 {
+	if len(cfg.Usage) == 0 {
 		cfg.Usage = DefaultConfig.Usage
 	}
 	if cfg.ExpiryString == "" {
