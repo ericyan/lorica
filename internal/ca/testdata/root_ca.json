@@ -1,0 +1,14 @@
+{
+  "CN": "Pied Piper Root CA",
+  "name": {
+    "OU": "Certification Authority",
+    "O": "Pied Piper",
+    "L": "Silicon Valley",
+    "ST": "CA",
+    "C": "US"
+  },
+  "expiry": "87600h",
+  "ca_constraint": {
+    "is_ca": true
+  }
+}
