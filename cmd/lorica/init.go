@@ -3,11 +3,10 @@ package main
 import (
 	"strings"
 
-	"github.com/cloudflare/cfssl/csr"
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ericyan/lorica/cmd"
 	"github.com/ericyan/lorica/cryptoki"
-	"github.com/ericyan/lorica/internal/ca"
+	"github.com/ericyan/lorica/internal/procedure"
 )
 
 func initCommand(args []string) {
@@ -17,34 +16,18 @@ func initCommand(args []string) {
 	}
 	defer tk.Close()
 
-	req := cfg.CertificateRequest()
-	key, err := cryptoki.NewKeyPair(tk, req.CN, req.KeyRequest)
+	pem, err := procedure.Init(tk, cfg, opts.selfsign)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	csrPEM, err := csr.Generate(key, req)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	var outputFilename string
 	if opts.selfsign {
-		ca, err := ca.New(nil, cfg, key)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		certPEM, err := ca.Sign(csrPEM)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		certPEMFilename := strings.Replace(opts.config, ".json", ".crt.pem", 1)
-		err = cmd.WriteFile(certPEMFilename, certPEM)
+		outputFilename = strings.Replace(opts.config, ".json", ".crt.pem", 1)
 	} else {
-		csrPEMFilename := strings.Replace(opts.config, ".json", ".csr.pem", 1)
-		err = cmd.WriteFile(csrPEMFilename, csrPEM)
+		outputFilename = strings.Replace(opts.config, ".json", ".csr.pem", 1)
 	}
+	err = cmd.WriteFile(outputFilename, pem)
 	if err != nil {
 		log.Fatal(err)
 	}
