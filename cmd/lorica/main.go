@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cfssl/log"
-	"github.com/ericyan/lorica/cmd"
 	"github.com/ericyan/lorica/cryptoki"
 	"github.com/ericyan/lorica/internal/ca"
+	"github.com/ericyan/lorica/internal/cliutil"
 	"github.com/ericyan/lorica/internal/procedure"
 	"github.com/joho/godotenv"
 )
@@ -103,18 +103,18 @@ func main() {
 		} else {
 			outputFilename = strings.Replace(opts.config, ".json", ".csr.pem", 1)
 		}
-		err = cmd.WriteFile(outputFilename, pem)
+		err = cliutil.WriteFile(outputFilename, pem)
 		if err != nil {
 			log.Fatal(err)
 		}
 	case "sign":
-		caPEM, err := cmd.ReadFile(opts.ca)
+		caPEM, err := cliutil.ReadFile(opts.ca)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		csrFilename := args[0]
-		csrPEM, err := cmd.ReadFile(csrFilename)
+		csrPEM, err := cliutil.ReadFile(csrFilename)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -125,7 +125,7 @@ func main() {
 		}
 
 		certPEMFilename := strings.TrimSuffix(csrFilename, ".csr.pem") + ".crt.pem"
-		err = cmd.WriteFile(certPEMFilename, certPEM)
+		err = cliutil.WriteFile(certPEMFilename, certPEM)
 		if err != nil {
 			log.Fatal(err)
 		}
