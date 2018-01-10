@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cfssl/log"
-	"github.com/ericyan/lorica/cryptoki"
 	"github.com/ericyan/lorica/internal/ca"
 	"github.com/ericyan/lorica/internal/cliutil"
 	"github.com/ericyan/lorica/internal/procedure"
+	"github.com/ericyan/lorica/pkg/cryptoki"
 	"github.com/joho/godotenv"
 )
 

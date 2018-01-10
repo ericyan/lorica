@@ -2,8 +2,8 @@ package procedure
 
 import (
 	"github.com/cloudflare/cfssl/helpers"
-	"github.com/ericyan/lorica/cryptoki"
 	"github.com/ericyan/lorica/internal/ca"
+	"github.com/ericyan/lorica/pkg/cryptoki"
 )
 
 // Sign finds the key pair with the public key in the CA certificate and

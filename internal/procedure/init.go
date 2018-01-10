@@ -2,8 +2,8 @@ package procedure
 
 import (
 	"github.com/cloudflare/cfssl/csr"
-	"github.com/ericyan/lorica/cryptoki"
 	"github.com/ericyan/lorica/internal/ca"
+	"github.com/ericyan/lorica/pkg/cryptoki"
 )
 
 // Init generates a key pair and CSR for the CA. If selfSign is true, a

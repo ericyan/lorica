@@ -6,7 +6,7 @@ import (
 
 	"github.com/cloudflare/cfssl/signer"
 	"github.com/cloudflare/cfssl/signer/local"
-	"github.com/ericyan/lorica/cryptoki"
+	"github.com/ericyan/lorica/pkg/cryptoki"
 )
 
 // CA represents a certification authority.
