@@ -3,13 +3,10 @@ package cryptoki
 import (
 	"crypto"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rsa"
-	"encoding/asn1"
 	"errors"
 	"fmt"
 	"hash/crc64"
-	"math/big"
 
 	"github.com/miekg/pkcs11"
 )
@@ -148,138 +145,27 @@ func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (pkcs11.ObjectHand
 		pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
 	}
 
-	var mech uint
+	var mechanism []*pkcs11.Mechanism
 	switch kr.Algo() {
 	case "rsa":
-		mech = pkcs11.CKM_RSA_PKCS_KEY_PAIR_GEN
+		var rsaAttrs []*pkcs11.Attribute
+		mechanism, rsaAttrs = getRSAKeyGenAttrs(kr)
 
-		// RSA public key object attributes (PKCS #11-M1 6.1.2)
-		publicKeyTemplate = append(publicKeyTemplate,
-			pkcs11.NewAttribute(pkcs11.CKA_MODULUS_BITS, kr.Size()),
-			pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, []byte{1, 0, 1}),
-		)
+		publicKeyTemplate = append(publicKeyTemplate, rsaAttrs...)
 	case "ecdsa":
-		mech = pkcs11.CKM_EC_KEY_PAIR_GEN
-
-		// Named curves (RFC 5480 2.1.1.1)
-		var curveOID asn1.ObjectIdentifier
-		switch kr.Size() {
-		case 224:
-			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
-		case 256:
-			curveOID = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}
-		case 384:
-			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 34}
-		case 521:
-			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 35}
-		default:
-			return nilObjectHandle, nilObjectHandle, fmt.Errorf("unknown curve: %d", kr.Size())
-		}
-		ecParams, err := asn1.Marshal(curveOID)
+		var ecdsaAttrs []*pkcs11.Attribute
+		var err error
+		mechanism, ecdsaAttrs, err = getECDSAKeyGenAttrs(kr)
 		if err != nil {
 			return nilObjectHandle, nilObjectHandle, err
 		}
 
-		// Elliptic curve public key object attributes(PKCS #11-M1 6.3.3)
-		publicKeyTemplate = append(publicKeyTemplate,
-			pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
-		)
+		publicKeyTemplate = append(publicKeyTemplate, ecdsaAttrs...)
 	default:
 		return nilObjectHandle, nilObjectHandle, fmt.Errorf("unsupported algorithm: %s", kr.Algo())
 	}
 
-	mechanism := []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
-
 	return tk.module.GenerateKeyPair(tk.session, mechanism, publicKeyTemplate, privateKeyTemplate)
-}
-
-// Get the RSA public key using the object handle.
-func (tk *Token) getRSAPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
-	template := []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_MODULUS, nil),
-		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, nil),
-	}
-	attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
-	if err != nil {
-		return nil, err
-	}
-
-	n := big.NewInt(0)
-	e := int(0)
-	gotModulus, gotExponent := false, false
-	for _, a := range attrs {
-		switch a.Type {
-		case pkcs11.CKA_MODULUS:
-			n.SetBytes(a.Value)
-			gotModulus = true
-		case pkcs11.CKA_PUBLIC_EXPONENT:
-			bigE := big.NewInt(0)
-			bigE.SetBytes(a.Value)
-			e = int(bigE.Int64())
-			gotExponent = true
-		}
-	}
-	if !gotModulus {
-		return nil, errors.New("missing public modulus")
-	}
-	if !gotExponent {
-		return nil, errors.New("missing public exponent")
-	}
-
-	return &rsa.PublicKey{N: n, E: e}, nil
-}
-
-// Get the EC public key using the object handle.
-func (tk *Token) getECPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
-	template := []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, nil),
-		pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, nil),
-	}
-	attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
-	if err != nil {
-		return nil, err
-	}
-
-	var curveOID asn1.ObjectIdentifier
-	var ecPoint asn1.RawValue
-	gotParams, gotPoint := false, false
-	for _, attr := range attrs {
-		switch attr.Type {
-		case pkcs11.CKA_EC_PARAMS:
-			asn1.Unmarshal(attr.Value, &curveOID)
-			gotParams = true
-		case pkcs11.CKA_EC_POINT:
-			asn1.Unmarshal(attr.Value, &ecPoint)
-			gotPoint = true
-		}
-	}
-	if !gotParams {
-		return nil, errors.New("missing EC params")
-	}
-	if !gotPoint {
-		return nil, errors.New("missing EC point")
-	}
-
-	var curve elliptic.Curve
-	switch {
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 33}):
-		curve = elliptic.P224()
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}):
-		curve = elliptic.P256()
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 34}):
-		curve = elliptic.P384()
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 35}):
-		curve = elliptic.P521()
-	default:
-		return nil, errors.New("invalid EC params")
-	}
-
-	x, y := elliptic.Unmarshal(curve, ecPoint.Bytes)
-	if x == nil || y == nil {
-		return nil, errors.New("invalid EC point")
-	}
-
-	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
 }
 
 // ExportPublicKey retrieves the public key with given object handle.
@@ -394,46 +280,12 @@ func (tk *Token) findPublicKey(pub crypto.PublicKey) (pkcs11.ObjectHandle, error
 	var template []*pkcs11.Attribute
 	switch key := pub.(type) {
 	case *rsa.PublicKey:
-		template = []*pkcs11.Attribute{
-			pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
-			pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
-			pkcs11.NewAttribute(pkcs11.CKA_MODULUS, key.N.Bytes()),
-			pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, big.NewInt(int64(key.E)).Bytes()),
-		}
+		template = getRSAPublicKeyTemplate(key)
 	case *ecdsa.PublicKey:
-		// CKA_EC_PARAMS is DER-encoding of an ANSI X9.62 Parameters value
-		var curveOID asn1.ObjectIdentifier
-		switch key.Curve {
-		case elliptic.P224():
-			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
-		case elliptic.P256():
-			curveOID = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}
-		case elliptic.P384():
-			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 34}
-		case elliptic.P521():
-			curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 35}
-		default:
-			return 0, errors.New("unknown elliptic curve")
-		}
-		ecParams, err := asn1.Marshal(curveOID)
+		var err error
+		template, err = getECPublicKeyTemplate(key)
 		if err != nil {
 			return 0, err
-		}
-
-		// CKA_EC_POINT is DER-encoding of ANSI X9.62 ECPoint value Q
-		ecPoint, err := asn1.Marshal(asn1.RawValue{
-			Tag:   asn1.TagOctetString,
-			Bytes: elliptic.Marshal(key.Curve, key.X, key.Y),
-		})
-		if err != nil {
-			return 0, err
-		}
-
-		template = []*pkcs11.Attribute{
-			pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
-			pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_EC),
-			pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
-			pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, ecPoint),
 		}
 	default:
 		return 0, fmt.Errorf("unsupported public key of type %T", pub)
