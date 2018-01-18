@@ -9,13 +9,39 @@ import (
 	"github.com/miekg/pkcs11"
 )
 
-func getRSAKeyGenAttrs(kr KeyRequest) ([]*pkcs11.Mechanism, []*pkcs11.Attribute) {
-	return []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS_KEY_PAIR_GEN, nil)},
-		// RSA public key object attributes (PKCS #11-M1 6.1.2)
-		[]*pkcs11.Attribute{
-			pkcs11.NewAttribute(pkcs11.CKA_MODULUS_BITS, kr.Size()),
-			pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, []byte{1, 0, 1}),
-		}
+// rsaKeyRequest contains parameters for generating RSA key pairs.
+type rsaKeyRequest struct {
+	size int
+}
+
+// NewRSAKeyRequest returns an RSA key request.
+func NewRSAKeyRequest(size int) KeyRequest {
+	return &rsaKeyRequest{size}
+}
+
+// Algo returns the requested key algorithm, "rsa", as a string.
+func (kr *rsaKeyRequest) Algo() string {
+	return "rsa"
+}
+
+// Size returns the requested key size in bits.
+func (kr *rsaKeyRequest) Size() int {
+	return kr.size
+}
+
+// Mechanisms returns a list of PKCS#11 mechanisms for generating an RSA
+// key pair.
+func (kr *rsaKeyRequest) Mechanisms() []*pkcs11.Mechanism {
+	return []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS_KEY_PAIR_GEN, nil)}
+}
+
+// Attrs returns the PKCS#11 public key object attributes for the RSA
+// key request (PKCS #11-M1 6.1.2).
+func (kr *rsaKeyRequest) Attrs() ([]*pkcs11.Attribute, error) {
+	return []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_MODULUS_BITS, kr.Size()),
+		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, []byte{1, 0, 1}),
+	}, nil
 }
 
 // Get the RSA public key using the object handle.

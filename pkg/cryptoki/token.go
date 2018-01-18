@@ -145,25 +145,22 @@ func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (pkcs11.ObjectHand
 		pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
 	}
 
-	var mechanism []*pkcs11.Mechanism
+	var req keyRequest
 	switch kr.Algo() {
 	case "rsa":
-		var rsaAttrs []*pkcs11.Attribute
-		mechanism, rsaAttrs = getRSAKeyGenAttrs(kr)
-
-		publicKeyTemplate = append(publicKeyTemplate, rsaAttrs...)
+		req = NewRSAKeyRequest(kr.Size()).(*rsaKeyRequest)
 	case "ecdsa":
-		var ecdsaAttrs []*pkcs11.Attribute
-		var err error
-		mechanism, ecdsaAttrs, err = getECDSAKeyGenAttrs(kr)
-		if err != nil {
-			return nilObjectHandle, nilObjectHandle, err
-		}
-
-		publicKeyTemplate = append(publicKeyTemplate, ecdsaAttrs...)
+		req = NewECKeyRequest(kr.Size()).(*ecdsaKeyRequest)
 	default:
 		return nilObjectHandle, nilObjectHandle, fmt.Errorf("unsupported algorithm: %s", kr.Algo())
 	}
+
+	mechanism := req.Mechanisms()
+	attrs, err := req.Attrs()
+	if err != nil {
+		return nilObjectHandle, nilObjectHandle, err
+	}
+	publicKeyTemplate = append(publicKeyTemplate, attrs...)
 
 	return tk.module.GenerateKeyPair(tk.session, mechanism, publicKeyTemplate, privateKeyTemplate)
 }

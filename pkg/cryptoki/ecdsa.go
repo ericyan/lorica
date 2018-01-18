@@ -11,10 +11,38 @@ import (
 	"github.com/miekg/pkcs11"
 )
 
-func getECDSAKeyGenAttrs(kr KeyRequest) ([]*pkcs11.Mechanism, []*pkcs11.Attribute, error) {
+// ecdsaKeyRequest contains parameters for generating ECDSA key pairs.
+type ecdsaKeyRequest struct {
+	size int
+}
+
+// NewECKeyRequest returns a prime256v1 EC(DSA) key request.
+func NewECKeyRequest(size int) KeyRequest {
+	return &ecdsaKeyRequest{size}
+}
+
+// Algo returns the requested key algorithm, "ecdsa", as a string.
+func (kr *ecdsaKeyRequest) Algo() string {
+	return "ecdsa"
+}
+
+// Size returns the requested key size, referring to a named curve.
+func (kr *ecdsaKeyRequest) Size() int {
+	return kr.size
+}
+
+// Mechanisms returns a list of PKCS#11 mechanisms for generating an
+// ECDSA key pair.
+func (kr *ecdsaKeyRequest) Mechanisms() []*pkcs11.Mechanism {
+	return []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_EC_KEY_PAIR_GEN, nil)}
+}
+
+// Attrs returns the PKCS#11 public key object attributes for the ECDSA
+// key request (PKCS #11-M1 6.3.3).
+func (kr *ecdsaKeyRequest) Attrs() ([]*pkcs11.Attribute, error) {
 	// Named curves (RFC 5480 2.1.1.1)
 	var curveOID asn1.ObjectIdentifier
-	switch kr.Size() {
+	switch kr.size {
 	case 224:
 		curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
 	case 256:
@@ -24,20 +52,17 @@ func getECDSAKeyGenAttrs(kr KeyRequest) ([]*pkcs11.Mechanism, []*pkcs11.Attribut
 	case 521:
 		curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 35}
 	default:
-		return nil, nil, fmt.Errorf("unknown curve: %d", kr.Size())
+		return nil, fmt.Errorf("unknown curve: %d", kr.size)
 	}
 
 	ecParams, err := asn1.Marshal(curveOID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_EC_KEY_PAIR_GEN, nil)},
-		// Elliptic curve public key object attributes(PKCS #11-M1 6.3.3)
-		[]*pkcs11.Attribute{
-			pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
-		},
-		nil
+	return []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
+	}, nil
 }
 
 // Get the EC public key using the object handle.
