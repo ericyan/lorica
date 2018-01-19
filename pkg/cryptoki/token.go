@@ -274,18 +274,23 @@ func (tk *Token) findObject(template []*pkcs11.Attribute) (pkcs11.ObjectHandle, 
 // findPublicKey looks up the given public key in the token, and returns
 // its object handle.
 func (tk *Token) findPublicKey(pub crypto.PublicKey) (pkcs11.ObjectHandle, error) {
-	var template []*pkcs11.Attribute
+	var kp keyParams
+	var err error
 	switch key := pub.(type) {
 	case *rsa.PublicKey:
-		template = getRSAPublicKeyTemplate(key)
+		kp, err = parseRSAKeyParams(key)
 	case *ecdsa.PublicKey:
-		var err error
-		template, err = getECPublicKeyTemplate(key)
-		if err != nil {
-			return 0, err
-		}
+		kp, err = parseECDSAKeyParams(key)
 	default:
 		return 0, fmt.Errorf("unsupported public key of type %T", pub)
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	template, err := kp.Attrs()
+	if err != nil {
+		return 0, err
 	}
 
 	return tk.findObject(template)

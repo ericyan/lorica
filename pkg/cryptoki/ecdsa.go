@@ -65,60 +65,12 @@ func (kr *ecdsaKeyRequest) Attrs() ([]*pkcs11.Attribute, error) {
 	}, nil
 }
 
-// Get the EC public key using the object handle.
-func (tk *Token) getECPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
-	template := []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, nil),
-		pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, nil),
-	}
-	attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
-	if err != nil {
-		return nil, err
-	}
-
-	var curveOID asn1.ObjectIdentifier
-	var ecPoint asn1.RawValue
-	gotParams, gotPoint := false, false
-	for _, attr := range attrs {
-		switch attr.Type {
-		case pkcs11.CKA_EC_PARAMS:
-			asn1.Unmarshal(attr.Value, &curveOID)
-			gotParams = true
-		case pkcs11.CKA_EC_POINT:
-			asn1.Unmarshal(attr.Value, &ecPoint)
-			gotPoint = true
-		}
-	}
-	if !gotParams {
-		return nil, errors.New("missing EC params")
-	}
-	if !gotPoint {
-		return nil, errors.New("missing EC point")
-	}
-
-	var curve elliptic.Curve
-	switch {
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 33}):
-		curve = elliptic.P224()
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}):
-		curve = elliptic.P256()
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 34}):
-		curve = elliptic.P384()
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 35}):
-		curve = elliptic.P521()
-	default:
-		return nil, errors.New("invalid EC params")
-	}
-
-	x, y := elliptic.Unmarshal(curve, ecPoint.Bytes)
-	if x == nil || y == nil {
-		return nil, errors.New("invalid EC point")
-	}
-
-	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+type ecdsaKeyParams struct {
+	ecParams []byte
+	ecPoint  []byte
 }
 
-func getECPublicKeyTemplate(key *ecdsa.PublicKey) ([]*pkcs11.Attribute, error) {
+func parseECDSAKeyParams(key *ecdsa.PublicKey) (*ecdsaKeyParams, error) {
 	// CKA_EC_PARAMS is DER-encoding of an ANSI X9.62 Parameters value
 	var curveOID asn1.ObjectIdentifier
 	switch key.Curve {
@@ -147,10 +99,76 @@ func getECPublicKeyTemplate(key *ecdsa.PublicKey) ([]*pkcs11.Attribute, error) {
 		return nil, err
 	}
 
+	return &ecdsaKeyParams{ecParams, ecPoint}, nil
+}
+
+// Attrs returns the PKCS#11 public key object attributes for the ECDSA
+// public key. if the underling public key is undefined, no error will
+// be returned, but the attribute values will be nil.
+func (kp *ecdsaKeyParams) Attrs() ([]*pkcs11.Attribute, error) {
 	return []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
 		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_EC),
-		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
-		pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, ecPoint),
+		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, kp.ecParams),
+		pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, kp.ecPoint),
 	}, nil
+}
+
+// Key recreates the public key using the key params.
+func (kp *ecdsaKeyParams) Key() (*ecdsa.PublicKey, error) {
+	if kp.ecParams == nil {
+		return nil, errors.New("missing EC params")
+	}
+
+	var curveOID asn1.ObjectIdentifier
+	asn1.Unmarshal(kp.ecParams, &curveOID)
+
+	var curve elliptic.Curve
+	switch {
+	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 33}):
+		curve = elliptic.P224()
+	case curveOID.Equal(asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}):
+		curve = elliptic.P256()
+	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 34}):
+		curve = elliptic.P384()
+	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 35}):
+		curve = elliptic.P521()
+	default:
+		return nil, errors.New("invalid EC params")
+	}
+
+	if kp.ecPoint == nil {
+		return nil, errors.New("missing EC point")
+	}
+
+	var ecPoint asn1.RawValue
+	asn1.Unmarshal(kp.ecPoint, &ecPoint)
+
+	x, y := elliptic.Unmarshal(curve, ecPoint.Bytes)
+	if x == nil || y == nil {
+		return nil, errors.New("invalid EC point")
+	}
+
+	return &ecdsa.PublicKey{curve, x, y}, nil
+}
+
+// Get the EC public key using the object handle.
+func (tk *Token) getECPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
+	template, _ := new(ecdsaKeyParams).Attrs()
+	attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
+	if err != nil {
+		return nil, err
+	}
+
+	kp := new(ecdsaKeyParams)
+	for _, attr := range attrs {
+		switch attr.Type {
+		case pkcs11.CKA_EC_PARAMS:
+			kp.ecParams = attr.Value
+		case pkcs11.CKA_EC_POINT:
+			kp.ecPoint = attr.Value
+		}
+	}
+
+	return kp.Key()
 }

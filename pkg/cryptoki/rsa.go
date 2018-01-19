@@ -44,47 +44,62 @@ func (kr *rsaKeyRequest) Attrs() ([]*pkcs11.Attribute, error) {
 	}, nil
 }
 
+type rsaKeyParams struct {
+	modulus  []byte
+	exponent []byte
+}
+
+func parseRSAKeyParams(key *rsa.PublicKey) (*rsaKeyParams, error) {
+	modulus := key.N.Bytes()
+	exponent := big.NewInt(int64(key.E)).Bytes()
+
+	return &rsaKeyParams{modulus, exponent}, nil
+}
+
+// Attrs returns the PKCS#11 public key object attributes for the RSA
+// public key. if the underling public key is undefined, no error will
+// be returned, but the attribute values will be nil.
+func (kp *rsaKeyParams) Attrs() ([]*pkcs11.Attribute, error) {
+	return []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
+		pkcs11.NewAttribute(pkcs11.CKA_MODULUS, kp.modulus),
+		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, kp.exponent),
+	}, nil
+}
+
+// Key recreates the public key using the key params.
+func (kp *rsaKeyParams) Key() (*rsa.PublicKey, error) {
+	if kp.modulus == nil {
+		return nil, errors.New("missing public modulus")
+	}
+	if kp.exponent == nil {
+		return nil, errors.New("missing public exponent")
+	}
+
+	n := new(big.Int).SetBytes(kp.modulus)
+	e := int(new(big.Int).SetBytes(kp.exponent).Int64())
+
+	return &rsa.PublicKey{n, e}, nil
+}
+
 // Get the RSA public key using the object handle.
 func (tk *Token) getRSAPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
-	template := []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_MODULUS, nil),
-		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, nil),
-	}
+	template, _ := new(rsaKeyParams).Attrs()
 	attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
 	if err != nil {
 		return nil, err
 	}
 
-	n := big.NewInt(0)
-	e := int(0)
-	gotModulus, gotExponent := false, false
+	kp := new(rsaKeyParams)
 	for _, a := range attrs {
 		switch a.Type {
 		case pkcs11.CKA_MODULUS:
-			n.SetBytes(a.Value)
-			gotModulus = true
+			kp.modulus = a.Value
 		case pkcs11.CKA_PUBLIC_EXPONENT:
-			bigE := big.NewInt(0)
-			bigE.SetBytes(a.Value)
-			e = int(bigE.Int64())
-			gotExponent = true
+			kp.exponent = a.Value
 		}
 	}
-	if !gotModulus {
-		return nil, errors.New("missing public modulus")
-	}
-	if !gotExponent {
-		return nil, errors.New("missing public exponent")
-	}
 
-	return &rsa.PublicKey{N: n, E: e}, nil
-}
-
-func getRSAPublicKeyTemplate(key *rsa.PublicKey) []*pkcs11.Attribute {
-	return []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
-		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
-		pkcs11.NewAttribute(pkcs11.CKA_MODULUS, key.N.Bytes()),
-		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, big.NewInt(int64(key.E)).Bytes()),
-	}
+	return kp.Key()
 }

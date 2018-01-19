@@ -24,6 +24,11 @@ type keyRequest interface {
 	Attrs() ([]*pkcs11.Attribute, error)
 }
 
+// keyParams provides a method for extracting attributes from a key.
+type keyParams interface {
+	Attrs() ([]*pkcs11.Attribute, error)
+}
+
 // KeyPair implements the crypto.Signer interface using a key pair kept
 // in PKCS #11 cryptographic token.
 type KeyPair struct {
