@@ -91,12 +91,49 @@ func NewKeyPair(tk *Token, label string, kr KeyRequest) (*KeyPair, error) {
 // FindKeyPair looks up the key pair inside the token with matching
 // public key.
 func FindKeyPair(tk *Token, pub crypto.PublicKey) (*KeyPair, error) {
-	pubHandle, err := tk.findPublicKey(pub)
+	// First, looks up the given public key in the token, and returns get
+	// its object handle if found.
+	var kp keyParams
+	var err error
+	switch key := pub.(type) {
+	case *rsa.PublicKey:
+		kp, err = parseRSAKeyParams(key)
+	case *ecdsa.PublicKey:
+		kp, err = parseECDSAKeyParams(key)
+	default:
+		return nil, fmt.Errorf("unsupported public key of type %T", pub)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	privHandle, err := tk.findPrivateKey(pubHandle)
+	template, err := kp.Attrs()
+	if err != nil {
+		return nil, err
+	}
+
+	pubHandle, err := tk.findObject(template)
+	if err != nil {
+		return nil, err
+	}
+
+	// Then looks up the private key with matching CKA_ID of the given public key handle.
+	attrs, err := tk.module.GetAttributeValue(tk.session, pubHandle, []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_ID, nil),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(attrs) == 0 || attrs[0].Type != pkcs11.CKA_ID {
+		return nil, errors.New("invalid attribute value")
+	}
+	publicKeyID := attrs[0].Value
+
+	privHandle, err := tk.findObject([]*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, publicKeyID),
+	})
 	if err != nil {
 		return nil, err
 	}

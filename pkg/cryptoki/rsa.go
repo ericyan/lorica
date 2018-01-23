@@ -1,7 +1,6 @@
 package cryptoki
 
 import (
-	"crypto"
 	"crypto/rsa"
 	"errors"
 	"math/big"
@@ -81,25 +80,4 @@ func (kp *rsaKeyParams) Key() (*rsa.PublicKey, error) {
 	e := int(new(big.Int).SetBytes(kp.exponent).Int64())
 
 	return &rsa.PublicKey{n, e}, nil
-}
-
-// Get the RSA public key using the object handle.
-func (tk *Token) getRSAPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
-	template, _ := new(rsaKeyParams).Attrs()
-	attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
-	if err != nil {
-		return nil, err
-	}
-
-	kp := new(rsaKeyParams)
-	for _, a := range attrs {
-		switch a.Type {
-		case pkcs11.CKA_MODULUS:
-			kp.modulus = a.Value
-		case pkcs11.CKA_PUBLIC_EXPONENT:
-			kp.exponent = a.Value
-		}
-	}
-
-	return kp.Key()
 }

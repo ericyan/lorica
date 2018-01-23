@@ -2,8 +2,6 @@ package cryptoki
 
 import (
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"errors"
 	"fmt"
 	"hash/crc64"
@@ -179,9 +177,41 @@ func (tk *Token) ExportPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, 
 
 	switch attr[0].Value[0] {
 	case pkcs11.CKK_RSA:
-		return tk.getRSAPublicKey(handle)
+		template, _ := new(rsaKeyParams).Attrs()
+		attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
+		if err != nil {
+			return nil, err
+		}
+
+		kp := new(rsaKeyParams)
+		for _, a := range attrs {
+			switch a.Type {
+			case pkcs11.CKA_MODULUS:
+				kp.modulus = a.Value
+			case pkcs11.CKA_PUBLIC_EXPONENT:
+				kp.exponent = a.Value
+			}
+		}
+
+		return kp.Key()
 	case pkcs11.CKK_EC:
-		return tk.getECPublicKey(handle)
+		template, _ := new(ecdsaKeyParams).Attrs()
+		attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
+		if err != nil {
+			return nil, err
+		}
+
+		kp := new(ecdsaKeyParams)
+		for _, attr := range attrs {
+			switch attr.Type {
+			case pkcs11.CKA_EC_PARAMS:
+				kp.ecParams = attr.Value
+			case pkcs11.CKA_EC_POINT:
+				kp.ecPoint = attr.Value
+			}
+		}
+
+		return kp.Key()
 	default:
 		return nil, errors.New("unknown key type")
 	}
@@ -269,49 +299,4 @@ func (tk *Token) findObject(template []*pkcs11.Attribute) (pkcs11.ObjectHandle, 
 	}
 
 	return objects[0], nil
-}
-
-// findPublicKey looks up the given public key in the token, and returns
-// its object handle.
-func (tk *Token) findPublicKey(pub crypto.PublicKey) (pkcs11.ObjectHandle, error) {
-	var kp keyParams
-	var err error
-	switch key := pub.(type) {
-	case *rsa.PublicKey:
-		kp, err = parseRSAKeyParams(key)
-	case *ecdsa.PublicKey:
-		kp, err = parseECDSAKeyParams(key)
-	default:
-		return 0, fmt.Errorf("unsupported public key of type %T", pub)
-	}
-	if err != nil {
-		return 0, err
-	}
-
-	template, err := kp.Attrs()
-	if err != nil {
-		return 0, err
-	}
-
-	return tk.findObject(template)
-}
-
-// findPrivateKey looks up the private key with matching CKA_ID of the
-// given public key handle.
-func (tk *Token) findPrivateKey(pubHandle pkcs11.ObjectHandle) (pkcs11.ObjectHandle, error) {
-	attrs, err := tk.module.GetAttributeValue(tk.session, pubHandle, []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_ID, nil),
-	})
-	if err != nil {
-		return 0, err
-	}
-	if len(attrs) == 0 || attrs[0].Type != pkcs11.CKA_ID {
-		return 0, errors.New("invalid attribute value")
-	}
-	publicKeyID := attrs[0].Value
-
-	return tk.findObject([]*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
-		pkcs11.NewAttribute(pkcs11.CKA_ID, publicKeyID),
-	})
 }

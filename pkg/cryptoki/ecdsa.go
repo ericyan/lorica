@@ -1,7 +1,6 @@
 package cryptoki
 
 import (
-	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"encoding/asn1"
@@ -150,25 +149,4 @@ func (kp *ecdsaKeyParams) Key() (*ecdsa.PublicKey, error) {
 	}
 
 	return &ecdsa.PublicKey{curve, x, y}, nil
-}
-
-// Get the EC public key using the object handle.
-func (tk *Token) getECPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
-	template, _ := new(ecdsaKeyParams).Attrs()
-	attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
-	if err != nil {
-		return nil, err
-	}
-
-	kp := new(ecdsaKeyParams)
-	for _, attr := range attrs {
-		switch attr.Type {
-		case pkcs11.CKA_EC_PARAMS:
-			kp.ecParams = attr.Value
-		case pkcs11.CKA_EC_POINT:
-			kp.ecPoint = attr.Value
-		}
-	}
-
-	return kp.Key()
 }
