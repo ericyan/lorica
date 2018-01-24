@@ -34,7 +34,6 @@ type keyParams interface {
 type KeyPair struct {
 	tk         *Token
 	pub        crypto.PublicKey
-	pubHandle  pkcs11.ObjectHandle
 	privHandle pkcs11.ObjectHandle
 }
 
@@ -85,7 +84,7 @@ func NewKeyPair(tk *Token, label string, kr KeyRequest) (*KeyPair, error) {
 
 	}
 
-	return &KeyPair{tk, pub, pubHandle, privHandle}, nil
+	return &KeyPair{tk, pub, privHandle}, nil
 }
 
 // FindKeyPair looks up the key pair inside the token with matching
@@ -138,5 +137,5 @@ func FindKeyPair(tk *Token, pub crypto.PublicKey) (*KeyPair, error) {
 		return nil, err
 	}
 
-	return &KeyPair{tk, pub, pubHandle, privHandle}, nil
+	return &KeyPair{tk, pub, privHandle}, nil
 }
