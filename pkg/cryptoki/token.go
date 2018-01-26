@@ -9,6 +9,8 @@ import (
 	"github.com/miekg/pkcs11"
 )
 
+const nilObjectHandle pkcs11.ObjectHandle = 0
+
 // A Token represents a cryptographic token that implements PKCS #11.
 type Token struct {
 	module  *pkcs11.Ctx
@@ -113,7 +115,6 @@ func (tk *Token) Info() (pkcs11.TokenInfo, error) {
 
 // GenerateKeyPair generates a key pair inside the token.
 func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (pkcs11.ObjectHandle, pkcs11.ObjectHandle, error) {
-	var nilObjectHandle pkcs11.ObjectHandle
 
 	keyID := uint(crc64.Checksum([]byte(label), crc64.MakeTable(crc64.ECMA)))
 
@@ -165,52 +166,26 @@ func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (pkcs11.ObjectHand
 
 // ExportPublicKey retrieves the public key with given object handle.
 func (tk *Token) ExportPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
-	attr, err := tk.module.GetAttributeValue(tk.session, handle, []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, false),
-	})
-	if (len(attr) == 0) || (len(attr[0].Value) == 0) {
-		err = errors.New("invalid public key object")
-	}
+	value, err := tk.GetAttribute(handle, pkcs11.CKA_KEY_TYPE)
 	if err != nil {
 		return nil, err
 	}
 
-	switch attr[0].Value[0] {
+	if len(value) == 0 {
+		return nil, errors.New("invalid public key object")
+	}
+	keyType := value[0]
+
+	switch keyType {
 	case pkcs11.CKK_RSA:
-		template, _ := new(rsaKeyParams).Attrs()
-		attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
-		if err != nil {
-			return nil, err
-		}
-
 		kp := new(rsaKeyParams)
-		for _, a := range attrs {
-			switch a.Type {
-			case pkcs11.CKA_MODULUS:
-				kp.modulus = a.Value
-			case pkcs11.CKA_PUBLIC_EXPONENT:
-				kp.exponent = a.Value
-			}
-		}
-
+		kp.modulus, _ = tk.GetAttribute(handle, pkcs11.CKA_MODULUS)
+		kp.exponent, _ = tk.GetAttribute(handle, pkcs11.CKA_PUBLIC_EXPONENT)
 		return kp.Key()
 	case pkcs11.CKK_EC:
-		template, _ := new(ecdsaKeyParams).Attrs()
-		attrs, err := tk.module.GetAttributeValue(tk.session, handle, template)
-		if err != nil {
-			return nil, err
-		}
-
 		kp := new(ecdsaKeyParams)
-		for _, attr := range attrs {
-			switch attr.Type {
-			case pkcs11.CKA_EC_PARAMS:
-				kp.ecParams = attr.Value
-			case pkcs11.CKA_EC_POINT:
-				kp.ecPoint = attr.Value
-			}
-		}
-
+		kp.ecParams, _ = tk.GetAttribute(handle, pkcs11.CKA_EC_PARAMS)
+		kp.ecPoint, _ = tk.GetAttribute(handle, pkcs11.CKA_EC_POINT)
 		return kp.Key()
 	default:
 		return nil, errors.New("unknown key type")
@@ -273,30 +248,44 @@ func (tk *Token) Sign(mech uint, digest []byte, key pkcs11.ObjectHandle, opts cr
 	return tk.module.Sign(tk.session, digest)
 }
 
-// findObject finds an object in the token matching a template. An error
-// will be returned if there is not exactly one result, or if there was
-// an error during the find calls.
-func (tk *Token) findObject(template []*pkcs11.Attribute) (pkcs11.ObjectHandle, error) {
-	err := tk.module.FindObjectsInit(tk.session, template)
+// FindObject returns the first object it found that matches the query.
+func (tk *Token) FindObject(query []*pkcs11.Attribute) (pkcs11.ObjectHandle, error) {
+	err := tk.module.FindObjectsInit(tk.session, query)
 	if err != nil {
-		return 0, err
+		return nilObjectHandle, err
 	}
 
-	objects, moreAvailable, err := tk.module.FindObjects(tk.session, 1)
+	result, _, err := tk.module.FindObjects(tk.session, 1)
 	if err != nil {
-		return 0, err
-	}
-	if moreAvailable {
-		return 0, errors.New("more than one object found")
+		return nilObjectHandle, err
 	}
 
 	err = tk.module.FindObjectsFinal(tk.session)
 	if err != nil {
-		return 0, err
-	}
-	if len(objects) == 0 {
-		return 0, errors.New("no objects found")
+		return nilObjectHandle, err
 	}
 
-	return objects[0], nil
+	if len(result) == 0 {
+		return nilObjectHandle, errors.New("object not found")
+	}
+
+	return result[0], nil
+}
+
+// GetAttribute obtains the value of a single object attribute. If there
+// are multiple attributes of the same type, it only returns the value
+// of the first one.
+func (tk *Token) GetAttribute(obj pkcs11.ObjectHandle, typ uint) ([]byte, error) {
+	attr, err := tk.module.GetAttributeValue(tk.session, obj, []*pkcs11.Attribute{
+		pkcs11.NewAttribute(typ, nil),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(attr) == 0 {
+		return nil, errors.New("attribute not found")
+	}
+
+	return attr[0].Value, nil
 }

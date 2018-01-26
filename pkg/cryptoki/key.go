@@ -111,25 +111,18 @@ func FindKeyPair(tk *Token, pub crypto.PublicKey) (*KeyPair, error) {
 		return nil, err
 	}
 
-	pubHandle, err := tk.findObject(template)
+	pubHandle, err := tk.FindObject(template)
 	if err != nil {
 		return nil, err
 	}
 
 	// Then looks up the private key with matching CKA_ID of the given public key handle.
-	attrs, err := tk.module.GetAttributeValue(tk.session, pubHandle, []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_ID, nil),
-	})
+	publicKeyID, err := tk.GetAttribute(pubHandle, pkcs11.CKA_ID)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(attrs) == 0 || attrs[0].Type != pkcs11.CKA_ID {
-		return nil, errors.New("invalid attribute value")
-	}
-	publicKeyID := attrs[0].Value
-
-	privHandle, err := tk.findObject([]*pkcs11.Attribute{
+	privHandle, err := tk.FindObject([]*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
 		pkcs11.NewAttribute(pkcs11.CKA_ID, publicKeyID),
 	})
