@@ -15,7 +15,7 @@ func Sign(tk *cryptoki.Token, cfg *ca.Config, caPEM, csrPEM []byte) ([]byte, err
 		return nil, err
 	}
 
-	key, err := cryptoki.FindKeyPair(tk, caCert.PublicKey)
+	key, err := tk.FindKeyPair(caCert.PublicKey)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,8 @@ package cryptoki
 
 import (
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"errors"
 	"fmt"
 	"hash/crc64"
@@ -114,10 +116,8 @@ func (tk *Token) Info() (pkcs11.TokenInfo, error) {
 }
 
 // GenerateKeyPair generates a key pair inside the token.
-func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (pkcs11.ObjectHandle, pkcs11.ObjectHandle, error) {
-
+func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (*KeyPair, error) {
 	keyID := uint(crc64.Checksum([]byte(label), crc64.MakeTable(crc64.ECMA)))
-
 	publicKeyTemplate := []*pkcs11.Attribute{
 		// Common storage object attributes (PKCS #11-B 10.4)
 		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
@@ -130,6 +130,23 @@ func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (pkcs11.ObjectHand
 		pkcs11.NewAttribute(pkcs11.CKA_ENCRYPT, true),
 		pkcs11.NewAttribute(pkcs11.CKA_VERIFY, true),
 	}
+
+	var req keyRequest
+	switch kr.Algo() {
+	case "rsa":
+		req = NewRSAKeyRequest(kr.Size()).(*rsaKeyRequest)
+	case "ecdsa":
+		req = NewECKeyRequest(kr.Size()).(*ecdsaKeyRequest)
+	default:
+		return nil, fmt.Errorf("unsupported algorithm: %s", kr.Algo())
+	}
+
+	attrs, err := req.Attrs()
+	if err != nil {
+		return nil, err
+	}
+	publicKeyTemplate = append(publicKeyTemplate, attrs...)
+
 	privateKeyTemplate := []*pkcs11.Attribute{
 		// Common storage object attributes (PKCS #11-B 10.4)
 		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
@@ -144,24 +161,63 @@ func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (pkcs11.ObjectHand
 		pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
 	}
 
-	var req keyRequest
-	switch kr.Algo() {
-	case "rsa":
-		req = NewRSAKeyRequest(kr.Size()).(*rsaKeyRequest)
-	case "ecdsa":
-		req = NewECKeyRequest(kr.Size()).(*ecdsaKeyRequest)
-	default:
-		return nilObjectHandle, nilObjectHandle, fmt.Errorf("unsupported algorithm: %s", kr.Algo())
-	}
-
-	mechanism := req.Mechanisms()
-	attrs, err := req.Attrs()
+	pubHandle, privHandle, err := tk.module.GenerateKeyPair(tk.session, req.Mechanisms(), publicKeyTemplate, privateKeyTemplate)
 	if err != nil {
-		return nilObjectHandle, nilObjectHandle, err
+		return nil, err
 	}
-	publicKeyTemplate = append(publicKeyTemplate, attrs...)
 
-	return tk.module.GenerateKeyPair(tk.session, mechanism, publicKeyTemplate, privateKeyTemplate)
+	pub, err := tk.ExportPublicKey(pubHandle)
+	if err != nil {
+		return nil, err
+
+	}
+
+	return &KeyPair{tk, pub, privHandle}, nil
+}
+
+// FindKeyPair looks up a key pair inside the token with the public key.
+func (tk *Token) FindKeyPair(pub crypto.PublicKey) (*KeyPair, error) {
+	// First, looks up the given public key in the token, and returns get
+	// its object handle if found.
+	var kp keyParams
+	var err error
+	switch key := pub.(type) {
+	case *rsa.PublicKey:
+		kp, err = parseRSAKeyParams(key)
+	case *ecdsa.PublicKey:
+		kp, err = parseECDSAKeyParams(key)
+	default:
+		return nil, fmt.Errorf("unsupported public key of type %T", pub)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	template, err := kp.Attrs()
+	if err != nil {
+		return nil, err
+	}
+
+	pubHandle, err := tk.FindObject(template)
+	if err != nil {
+		return nil, err
+	}
+
+	// Then looks up the private key with matching CKA_ID of the given public key handle.
+	publicKeyID, err := tk.GetAttribute(pubHandle, pkcs11.CKA_ID)
+	if err != nil {
+		return nil, err
+	}
+
+	privHandle, err := tk.FindObject([]*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, publicKeyID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &KeyPair{tk, pub, privHandle}, nil
 }
 
 // ExportPublicKey retrieves the public key with given object handle.
@@ -192,60 +248,15 @@ func (tk *Token) ExportPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, 
 	}
 }
 
-// Sign signs digest with the private key in token. It is the caller's
-// responsibility to compute the message digest.
-func (tk *Token) Sign(mech uint, digest []byte, key pkcs11.ObjectHandle, opts crypto.SignerOpts) (signature []byte, err error) {
-	var mechanism []*pkcs11.Mechanism
-	switch mech {
-	// The PKCS #1 v1.5 RSA mechanism	corresponds only to the part that
-	// involves RSA; it does not compute the DigestInfo, which is  a DER-
-	// serialised ASN.1 struct:
-	//
-	//	DigestInfo ::= SEQUENCE {
-	//		digestAlgorithm AlgorithmIdentifier,
-	//		digest OCTET STRING
-	//	}
-	case pkcs11.CKM_RSA_PKCS:
-		mechanism = []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
-
-		// For performance, we precompute a prefix of the digest value that
-		// makes a valid ASN.1 DER string.
-		var prefix []byte
-		switch opts.HashFunc() {
-		case crypto.MD5:
-			prefix = []byte{0x30, 0x20, 0x30, 0x0c, 0x06, 0x08, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x02, 0x05, 0x05, 0x00, 0x04, 0x10}
-		case crypto.SHA1:
-			prefix = []byte{0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14}
-		case crypto.SHA224:
-			prefix = []byte{0x30, 0x2d, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x04, 0x05, 0x00, 0x04, 0x1c}
-		case crypto.SHA256:
-			prefix = []byte{0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20}
-		case crypto.SHA384:
-			prefix = []byte{0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30}
-		case crypto.SHA512:
-			prefix = []byte{0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40}
-		default:
-			return nil, errors.New("unsupported hash function")
-		}
-		digest = append(prefix, digest...)
-
-	case pkcs11.CKM_RSA_PKCS_PSS:
-		// TODO: Support the PKCS #1 RSA PSS mechanism.
-		return nil, errors.New("mechanism not available")
-
-	// The ECDSA (without hashing) mechanism does not have a parameter.
-	case pkcs11.CKM_ECDSA:
-		mechanism = []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
-	default:
-		return nil, errors.New("unsupported mechanism")
+// Sign signs msg with the private key inside the token. The caller is
+// responsibile to compute the message digest.
+func (tk *Token) Sign(mech uint, msg []byte, key pkcs11.ObjectHandle) ([]byte, error) {
+	m := []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
+	if err := tk.module.SignInit(tk.session, m, key); err != nil {
+		return nil, err
 	}
 
-	err = tk.module.SignInit(tk.session, mechanism, key)
-	if err != nil {
-		return nil, fmt.Errorf("sign init error: %s", err)
-	}
-
-	return tk.module.Sign(tk.session, digest)
+	return tk.module.Sign(tk.session, msg)
 }
 
 // FindObject returns the first object it found that matches the query.
