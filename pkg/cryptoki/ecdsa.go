@@ -5,10 +5,17 @@ import (
 	"crypto/elliptic"
 	"encoding/asn1"
 	"errors"
-	"fmt"
 
 	"github.com/miekg/pkcs11"
 )
+
+// Named curves (RFC 5480 2.1.1.1)
+var curveOIDs = map[elliptic.Curve]asn1.ObjectIdentifier{
+	elliptic.P224(): asn1.ObjectIdentifier{1, 3, 132, 0, 33},
+	elliptic.P256(): asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7},
+	elliptic.P384(): asn1.ObjectIdentifier{1, 3, 132, 0, 34},
+	elliptic.P521(): asn1.ObjectIdentifier{1, 3, 132, 0, 35},
+}
 
 // ecdsaKeyRequest contains parameters for generating ECDSA key pairs.
 type ecdsaKeyRequest struct {
@@ -30,6 +37,23 @@ func (kr *ecdsaKeyRequest) Size() int {
 	return kr.size
 }
 
+// Curve returns the elliptic curves based on key size. It returns nil
+// if the curve is unknown.
+func (kr *ecdsaKeyRequest) Curve() elliptic.Curve {
+	switch kr.size {
+	case 224:
+		return elliptic.P224()
+	case 256:
+		return elliptic.P256()
+	case 384:
+		return elliptic.P384()
+	case 521:
+		return elliptic.P521()
+	default:
+		return nil
+	}
+}
+
 // Mechanisms returns a list of PKCS#11 mechanisms for generating an
 // ECDSA key pair.
 func (kr *ecdsaKeyRequest) Mechanisms() []*pkcs11.Mechanism {
@@ -39,19 +63,9 @@ func (kr *ecdsaKeyRequest) Mechanisms() []*pkcs11.Mechanism {
 // Attrs returns the PKCS#11 public key object attributes for the ECDSA
 // key request (PKCS #11-M1 6.3.3).
 func (kr *ecdsaKeyRequest) Attrs() ([]*pkcs11.Attribute, error) {
-	// Named curves (RFC 5480 2.1.1.1)
-	var curveOID asn1.ObjectIdentifier
-	switch kr.size {
-	case 224:
-		curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
-	case 256:
-		curveOID = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}
-	case 384:
-		curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 34}
-	case 521:
-		curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 35}
-	default:
-		return nil, fmt.Errorf("unknown curve: %d", kr.size)
+	curveOID, ok := curveOIDs[kr.Curve()]
+	if !ok {
+		return nil, errors.New("unknown elliptic curve")
 	}
 
 	ecParams, err := asn1.Marshal(curveOID)
@@ -70,20 +84,12 @@ type ecdsaKeyParams struct {
 }
 
 func parseECDSAKeyParams(key *ecdsa.PublicKey) (*ecdsaKeyParams, error) {
-	// CKA_EC_PARAMS is DER-encoding of an ANSI X9.62 Parameters value
-	var curveOID asn1.ObjectIdentifier
-	switch key.Curve {
-	case elliptic.P224():
-		curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
-	case elliptic.P256():
-		curveOID = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}
-	case elliptic.P384():
-		curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 34}
-	case elliptic.P521():
-		curveOID = asn1.ObjectIdentifier{1, 3, 132, 0, 35}
-	default:
+	curveOID, ok := curveOIDs[key.Curve]
+	if !ok {
 		return nil, errors.New("unknown elliptic curve")
 	}
+
+	// CKA_EC_PARAMS is DER-encoding of an ANSI X9.62 Parameters value
 	ecParams, err := asn1.Marshal(curveOID)
 	if err != nil {
 		return nil, err
@@ -123,16 +129,13 @@ func (kp *ecdsaKeyParams) Key() (*ecdsa.PublicKey, error) {
 	asn1.Unmarshal(kp.ecParams, &curveOID)
 
 	var curve elliptic.Curve
-	switch {
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 33}):
-		curve = elliptic.P224()
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}):
-		curve = elliptic.P256()
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 34}):
-		curve = elliptic.P384()
-	case curveOID.Equal(asn1.ObjectIdentifier{1, 3, 132, 0, 35}):
-		curve = elliptic.P521()
-	default:
+	for c, oid := range curveOIDs {
+		if curveOID.Equal(oid) {
+			curve = c
+			break
+		}
+	}
+	if curve == nil {
 		return nil, errors.New("invalid EC params")
 	}
 
