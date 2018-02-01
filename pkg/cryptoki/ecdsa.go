@@ -126,7 +126,10 @@ func (kp *ecdsaKeyParams) Key() (*ecdsa.PublicKey, error) {
 	}
 
 	var curveOID asn1.ObjectIdentifier
-	asn1.Unmarshal(kp.ecParams, &curveOID)
+	_, err := asn1.Unmarshal(kp.ecParams, &curveOID)
+	if err != nil {
+		return nil, err
+	}
 
 	var curve elliptic.Curve
 	for c, oid := range curveOIDs {
@@ -144,7 +147,10 @@ func (kp *ecdsaKeyParams) Key() (*ecdsa.PublicKey, error) {
 	}
 
 	var ecPoint asn1.RawValue
-	asn1.Unmarshal(kp.ecPoint, &ecPoint)
+	_, err = asn1.Unmarshal(kp.ecPoint, &ecPoint)
+	if err != nil {
+		return nil, err
+	}
 
 	x, y := elliptic.Unmarshal(curve, ecPoint.Bytes)
 	if x == nil || y == nil {
