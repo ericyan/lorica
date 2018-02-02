@@ -29,6 +29,17 @@ type keyParams interface {
 	Attrs() ([]*pkcs11.Attribute, error)
 }
 
+func parseKeyParams(pub crypto.PublicKey) (keyParams, error) {
+	switch key := pub.(type) {
+	case *rsa.PublicKey:
+		return parseRSAKeyParams(key)
+	case *ecdsa.PublicKey:
+		return parseECDSAKeyParams(key)
+	default:
+		return nil, fmt.Errorf("unsupported public key of type %T", pub)
+	}
+}
+
 // KeyPair implements the crypto.Signer interface using a key pair kept
 // in PKCS #11 cryptographic token.
 type KeyPair struct {

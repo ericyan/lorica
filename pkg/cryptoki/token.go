@@ -2,16 +2,12 @@ package cryptoki
 
 import (
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"errors"
 	"fmt"
 	"hash/crc64"
 
 	"github.com/miekg/pkcs11"
 )
-
-const nilObjectHandle pkcs11.ObjectHandle = 0
 
 // A Token represents a cryptographic token that implements PKCS #11.
 type Token struct {
@@ -179,16 +175,7 @@ func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (*KeyPair, error) 
 func (tk *Token) FindKeyPair(pub crypto.PublicKey) (*KeyPair, error) {
 	// First, looks up the given public key in the token, and returns get
 	// its object handle if found.
-	var kp keyParams
-	var err error
-	switch key := pub.(type) {
-	case *rsa.PublicKey:
-		kp, err = parseRSAKeyParams(key)
-	case *ecdsa.PublicKey:
-		kp, err = parseECDSAKeyParams(key)
-	default:
-		return nil, fmt.Errorf("unsupported public key of type %T", pub)
-	}
+	kp, err := parseKeyParams(pub)
 	if err != nil {
 		return nil, err
 	}
@@ -263,21 +250,21 @@ func (tk *Token) Sign(mech uint, msg []byte, key pkcs11.ObjectHandle) ([]byte, e
 func (tk *Token) FindObject(query []*pkcs11.Attribute) (pkcs11.ObjectHandle, error) {
 	err := tk.module.FindObjectsInit(tk.session, query)
 	if err != nil {
-		return nilObjectHandle, err
+		return 0, err
 	}
 
 	result, _, err := tk.module.FindObjects(tk.session, 1)
 	if err != nil {
-		return nilObjectHandle, err
+		return 0, err
 	}
 
 	err = tk.module.FindObjectsFinal(tk.session)
 	if err != nil {
-		return nilObjectHandle, err
+		return 0, err
 	}
 
 	if len(result) == 0 {
-		return nilObjectHandle, errors.New("object not found")
+		return 0, errors.New("object not found")
 	}
 
 	return result[0], nil
