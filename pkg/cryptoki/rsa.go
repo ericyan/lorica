@@ -13,9 +13,9 @@ type rsaKeyRequest struct {
 	size int
 }
 
-// NewRSAKeyRequest returns an RSA key request.
-func NewRSAKeyRequest(size int) KeyRequest {
-	return &rsaKeyRequest{size}
+// newRSAKeyRequest returns an RSA key request.
+func newRSAKeyRequest(size int) (*rsaKeyRequest, error) {
+	return &rsaKeyRequest{size}, nil
 }
 
 // Algo returns the requested key algorithm, "rsa", as a string.
@@ -36,11 +36,11 @@ func (kr *rsaKeyRequest) Mechanisms() []*pkcs11.Mechanism {
 
 // Attrs returns the PKCS#11 public key object attributes for the RSA
 // key request (PKCS #11-M1 6.1.2).
-func (kr *rsaKeyRequest) Attrs() ([]*pkcs11.Attribute, error) {
+func (kr *rsaKeyRequest) Attrs() []*pkcs11.Attribute {
 	return []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_MODULUS_BITS, kr.Size()),
 		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, []byte{1, 0, 1}),
-	}, nil
+	}
 }
 
 type rsaKeyParams struct {

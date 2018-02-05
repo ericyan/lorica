@@ -21,7 +21,18 @@ type KeyRequest interface {
 type keyRequest interface {
 	KeyRequest
 	Mechanisms() []*pkcs11.Mechanism
-	Attrs() ([]*pkcs11.Attribute, error)
+	Attrs() []*pkcs11.Attribute
+}
+
+func extendKeyRequest(kr KeyRequest) (keyRequest, error) {
+	switch kr.Algo() {
+	case "rsa":
+		return newRSAKeyRequest(kr.Size())
+	case "ecdsa":
+		return newECDSAKeyRequest(kr.Size())
+	default:
+		return nil, fmt.Errorf("unsupported algorithm: %s", kr.Algo())
+	}
 }
 
 // keyParams provides a method for extracting attributes from a key.

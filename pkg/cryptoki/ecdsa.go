@@ -19,12 +19,23 @@ var curveOIDs = map[elliptic.Curve]asn1.ObjectIdentifier{
 
 // ecdsaKeyRequest contains parameters for generating ECDSA key pairs.
 type ecdsaKeyRequest struct {
-	size int
+	curve elliptic.Curve
 }
 
-// NewECKeyRequest returns a prime256v1 EC(DSA) key request.
-func NewECKeyRequest(size int) KeyRequest {
-	return &ecdsaKeyRequest{size}
+// newECDSAKeyRequest returns a prime256v1 EC(DSA) key request.
+func newECDSAKeyRequest(size int) (*ecdsaKeyRequest, error) {
+	switch size {
+	case 224:
+		return &ecdsaKeyRequest{elliptic.P224()}, nil
+	case 256:
+		return &ecdsaKeyRequest{elliptic.P256()}, nil
+	case 384:
+		return &ecdsaKeyRequest{elliptic.P384()}, nil
+	case 521:
+		return &ecdsaKeyRequest{elliptic.P521()}, nil
+	default:
+		return nil, errors.New("unknown elliptic curve")
+	}
 }
 
 // Algo returns the requested key algorithm, "ecdsa", as a string.
@@ -34,24 +45,7 @@ func (kr *ecdsaKeyRequest) Algo() string {
 
 // Size returns the requested key size, referring to a named curve.
 func (kr *ecdsaKeyRequest) Size() int {
-	return kr.size
-}
-
-// Curve returns the elliptic curves based on key size. It returns nil
-// if the curve is unknown.
-func (kr *ecdsaKeyRequest) Curve() elliptic.Curve {
-	switch kr.size {
-	case 224:
-		return elliptic.P224()
-	case 256:
-		return elliptic.P256()
-	case 384:
-		return elliptic.P384()
-	case 521:
-		return elliptic.P521()
-	default:
-		return nil
-	}
+	return kr.curve.Params().BitSize
 }
 
 // Mechanisms returns a list of PKCS#11 mechanisms for generating an
@@ -62,20 +56,11 @@ func (kr *ecdsaKeyRequest) Mechanisms() []*pkcs11.Mechanism {
 
 // Attrs returns the PKCS#11 public key object attributes for the ECDSA
 // key request (PKCS #11-M1 6.3.3).
-func (kr *ecdsaKeyRequest) Attrs() ([]*pkcs11.Attribute, error) {
-	curveOID, ok := curveOIDs[kr.Curve()]
-	if !ok {
-		return nil, errors.New("unknown elliptic curve")
-	}
-
-	ecParams, err := asn1.Marshal(curveOID)
-	if err != nil {
-		return nil, err
-	}
-
+func (kr *ecdsaKeyRequest) Attrs() []*pkcs11.Attribute {
+	ecParams, _ := asn1.Marshal(curveOIDs[kr.curve])
 	return []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
-	}, nil
+	}
 }
 
 type ecdsaKeyParams struct {

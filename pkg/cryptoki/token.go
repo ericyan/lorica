@@ -114,7 +114,13 @@ func (tk *Token) Info() (pkcs11.TokenInfo, error) {
 // GenerateKeyPair generates a key pair inside the token.
 func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (*KeyPair, error) {
 	keyID := uint(crc64.Checksum([]byte(label), crc64.MakeTable(crc64.ECMA)))
-	publicKeyTemplate := []*pkcs11.Attribute{
+
+	req, err := extendKeyRequest(kr)
+	if err != nil {
+		return nil, err
+	}
+
+	publicKeyTemplate := append([]*pkcs11.Attribute{
 		// Common storage object attributes (PKCS #11-B 10.4)
 		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
 		pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, false),
@@ -125,23 +131,7 @@ func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (*KeyPair, error) 
 		// Common public key attributes (PKCS #11-B 10.8)
 		pkcs11.NewAttribute(pkcs11.CKA_ENCRYPT, true),
 		pkcs11.NewAttribute(pkcs11.CKA_VERIFY, true),
-	}
-
-	var req keyRequest
-	switch kr.Algo() {
-	case "rsa":
-		req = NewRSAKeyRequest(kr.Size()).(*rsaKeyRequest)
-	case "ecdsa":
-		req = NewECKeyRequest(kr.Size()).(*ecdsaKeyRequest)
-	default:
-		return nil, fmt.Errorf("unsupported algorithm: %s", kr.Algo())
-	}
-
-	attrs, err := req.Attrs()
-	if err != nil {
-		return nil, err
-	}
-	publicKeyTemplate = append(publicKeyTemplate, attrs...)
+	}, req.Attrs()...)
 
 	privateKeyTemplate := []*pkcs11.Attribute{
 		// Common storage object attributes (PKCS #11-B 10.4)
