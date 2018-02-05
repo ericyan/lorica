@@ -11,31 +11,31 @@ import (
 
 // A Token represents a cryptographic token that implements PKCS #11.
 type Token struct {
-	module  *pkcs11.Ctx
+	module *pkcs11.Ctx
+	slotID uint
+
 	session pkcs11.SessionHandle
 }
 
 // findSlot retrieves ID of the slot with matching token label.
-func findSlot(module *pkcs11.Ctx, tokenLabel string) (uint, error) {
-	var nilSlot uint
-
+func findSlot(module *pkcs11.Ctx, tokenLabel string) (slotID uint, err error) {
 	slots, err := module.GetSlotList(true)
 	if err != nil {
-		return nilSlot, fmt.Errorf("failed to get slot list: %s", err)
+		return slotID, fmt.Errorf("failed to get slot list: %s", err)
 	}
 
-	for _, slot := range slots {
-		tokenInfo, err := module.GetTokenInfo(slot)
+	for _, id := range slots {
+		tokenInfo, err := module.GetTokenInfo(id)
 		if err != nil {
-			return nilSlot, fmt.Errorf("failed to get token info: %s", err)
+			return slotID, fmt.Errorf("failed to get token info: %s", err)
 		}
 
 		if tokenInfo.Label == tokenLabel {
-			return slot, nil
+			return id, nil
 		}
 	}
 
-	return nilSlot, fmt.Errorf("no slot with token label '%q'", tokenLabel)
+	return slotID, fmt.Errorf("no slot with token label '%q'", tokenLabel)
 }
 
 // OpenToken opens a new session with the given cryptographic token.
@@ -76,7 +76,7 @@ func OpenToken(modulePath, tokenLabel, pin string, readOnly bool) (*Token, error
 		return nil, err
 	}
 
-	return &Token{module, session}, nil
+	return &Token{module, slotID, session}, nil
 }
 
 // Close closes the current session with the token.
