@@ -180,12 +180,7 @@ func (tk *Token) FindKeyPair(pub crypto.PublicKey) (*KeyPair, error) {
 		return nil, err
 	}
 
-	template, err := kp.Attrs()
-	if err != nil {
-		return nil, err
-	}
-
-	pubHandle, err := tk.FindObject(template)
+	pubHandle, err := tk.FindObject(kp.Attrs())
 	if err != nil {
 		return nil, err
 	}

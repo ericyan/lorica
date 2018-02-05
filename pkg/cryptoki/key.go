@@ -26,7 +26,7 @@ type keyRequest interface {
 
 // keyParams provides a method for extracting attributes from a key.
 type keyParams interface {
-	Attrs() ([]*pkcs11.Attribute, error)
+	Attrs() []*pkcs11.Attribute
 }
 
 func parseKeyParams(pub crypto.PublicKey) (keyParams, error) {

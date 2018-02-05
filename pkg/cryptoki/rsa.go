@@ -58,13 +58,13 @@ func parseRSAKeyParams(key *rsa.PublicKey) (*rsaKeyParams, error) {
 // Attrs returns the PKCS#11 public key object attributes for the RSA
 // public key. if the underling public key is undefined, no error will
 // be returned, but the attribute values will be nil.
-func (kp *rsaKeyParams) Attrs() ([]*pkcs11.Attribute, error) {
+func (kp *rsaKeyParams) Attrs() []*pkcs11.Attribute {
 	return []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
 		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
 		pkcs11.NewAttribute(pkcs11.CKA_MODULUS, kp.modulus),
 		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, kp.exponent),
-	}, nil
+	}
 }
 
 // Key recreates the public key using the key params.

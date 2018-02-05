@@ -110,13 +110,13 @@ func parseECDSAKeyParams(key *ecdsa.PublicKey) (*ecdsaKeyParams, error) {
 // Attrs returns the PKCS#11 public key object attributes for the ECDSA
 // public key. if the underling public key is undefined, no error will
 // be returned, but the attribute values will be nil.
-func (kp *ecdsaKeyParams) Attrs() ([]*pkcs11.Attribute, error) {
+func (kp *ecdsaKeyParams) Attrs() []*pkcs11.Attribute {
 	return []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
 		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_EC),
 		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, kp.ecParams),
 		pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, kp.ecPoint),
-	}, nil
+	}
 }
 
 // Key recreates the public key using the key params.
