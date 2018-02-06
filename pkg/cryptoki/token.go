@@ -96,19 +96,7 @@ func (tk *Token) Close() error {
 
 // Info obtains information about the token.
 func (tk *Token) Info() (pkcs11.TokenInfo, error) {
-	var nilTokenInfo pkcs11.TokenInfo
-
-	sessionInfo, err := tk.module.GetSessionInfo(tk.session)
-	if err != nil {
-		return nilTokenInfo, fmt.Errorf("failed to get session info: %s", err)
-	}
-
-	tokenInfo, err := tk.module.GetTokenInfo(sessionInfo.SlotID)
-	if err != nil {
-		return nilTokenInfo, fmt.Errorf("failed to get token info: %s", err)
-	}
-
-	return tokenInfo, nil
+	return tk.module.GetTokenInfo(tk.slotID)
 }
 
 // GenerateKeyPair generates a key pair inside the token.
