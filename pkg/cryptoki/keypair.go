@@ -11,52 +11,64 @@ import (
 	"github.com/miekg/pkcs11"
 )
 
-// A KeyRequest is a generic request for a new key pair.
-type KeyRequest interface {
-	Algo() string
-	Size() int
-}
-
-// A keyRequest is a KeyRequest with additional internal methods.
-type keyRequest interface {
-	KeyRequest
-	Mechanisms() []*pkcs11.Mechanism
-	Attrs() []*pkcs11.Attribute
-}
-
-func extendKeyRequest(kr KeyRequest) (keyRequest, error) {
-	switch kr.Algo() {
-	case "rsa":
-		return newRSAKeyRequest(kr.Size())
-	case "ecdsa":
-		return newECDSAKeyRequest(kr.Size())
-	default:
-		return nil, fmt.Errorf("unsupported algorithm: %s", kr.Algo())
-	}
-}
-
-// keyParams provides a method for extracting attributes from a key.
-type keyParams interface {
-	Attrs() []*pkcs11.Attribute
-}
-
-func parseKeyParams(pub crypto.PublicKey) (keyParams, error) {
-	switch key := pub.(type) {
-	case *rsa.PublicKey:
-		return parseRSAKeyParams(key)
-	case *ecdsa.PublicKey:
-		return parseECDSAKeyParams(key)
-	default:
-		return nil, fmt.Errorf("unsupported public key of type %T", pub)
-	}
-}
-
 // KeyPair implements the crypto.Signer interface using a key pair kept
 // in PKCS #11 cryptographic token.
 type KeyPair struct {
 	tk         *Token
 	pub        crypto.PublicKey
 	privHandle pkcs11.ObjectHandle
+}
+
+// GenerateKeyPair generates a key pair inside the token.
+func (tk *Token) GenerateKeyPair(label string, algo string, size int) (*KeyPair, error) {
+	kr, err := newKeyRequest(label, algo, size)
+	if err != nil {
+		return nil, err
+	}
+
+	pubHandle, privHandle, err := tk.module.GenerateKeyPair(tk.session, kr.Mechanisms(), kr.PublicAttrs(), kr.PrivateAttrs())
+	if err != nil {
+		return nil, err
+	}
+
+	pub, err := tk.ExportPublicKey(pubHandle)
+	if err != nil {
+		return nil, err
+
+	}
+
+	return &KeyPair{tk, pub, privHandle}, nil
+}
+
+// FindKeyPair looks up a key pair inside the token with the public key.
+func (tk *Token) FindKeyPair(key crypto.PublicKey) (*KeyPair, error) {
+	// First, looks up the given public key in the token, and returns get
+	// its object handle if found.
+	pub, err := newPublicKey(key)
+	if err != nil {
+		return nil, err
+	}
+
+	pubHandle, err := tk.FindObject(pub.Attrs())
+	if err != nil {
+		return nil, err
+	}
+
+	// Then looks up the private key with matching CKA_ID of the given public key handle.
+	publicKeyID, err := tk.GetAttribute(pubHandle, pkcs11.CKA_ID)
+	if err != nil {
+		return nil, err
+	}
+
+	privHandle, err := tk.FindObject([]*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, publicKeyID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &KeyPair{tk, pub, privHandle}, nil
 }
 
 // Public returns the public key of the key pair.

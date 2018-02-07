@@ -11,7 +11,7 @@ import (
 // the PEM-encoded CSR will be returned.
 func Init(tk *cryptoki.Token, cfg *ca.Config, selfSign bool) ([]byte, error) {
 	req := cfg.CertificateRequest()
-	key, err := tk.GenerateKeyPair(req.CN, req.KeyRequest)
+	key, err := tk.GenerateKeyPair(req.CN, req.KeyRequest.Algo(), req.KeyRequest.Size())
 	if err != nil {
 		return nil, err
 	}

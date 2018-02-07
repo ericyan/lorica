@@ -4,7 +4,6 @@ import (
 	"crypto"
 	"errors"
 	"fmt"
-	"hash/crc64"
 
 	"github.com/miekg/pkcs11"
 )
@@ -99,87 +98,6 @@ func (tk *Token) Info() (pkcs11.TokenInfo, error) {
 	return tk.module.GetTokenInfo(tk.slotID)
 }
 
-// GenerateKeyPair generates a key pair inside the token.
-func (tk *Token) GenerateKeyPair(label string, kr KeyRequest) (*KeyPair, error) {
-	keyID := uint(crc64.Checksum([]byte(label), crc64.MakeTable(crc64.ECMA)))
-
-	req, err := extendKeyRequest(kr)
-	if err != nil {
-		return nil, err
-	}
-
-	publicKeyTemplate := append([]*pkcs11.Attribute{
-		// Common storage object attributes (PKCS #11-B 10.4)
-		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
-		pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, false),
-		pkcs11.NewAttribute(pkcs11.CKA_MODIFIABLE, false),
-		pkcs11.NewAttribute(pkcs11.CKA_LABEL, label),
-		// Common key attributes (PKCS #11-B 10.7)
-		pkcs11.NewAttribute(pkcs11.CKA_ID, keyID),
-		// Common public key attributes (PKCS #11-B 10.8)
-		pkcs11.NewAttribute(pkcs11.CKA_ENCRYPT, true),
-		pkcs11.NewAttribute(pkcs11.CKA_VERIFY, true),
-	}, req.Attrs()...)
-
-	privateKeyTemplate := []*pkcs11.Attribute{
-		// Common storage object attributes (PKCS #11-B 10.4)
-		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
-		pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, true),
-		pkcs11.NewAttribute(pkcs11.CKA_MODIFIABLE, false),
-		pkcs11.NewAttribute(pkcs11.CKA_LABEL, label),
-		// Common key attributes (PKCS #11-B 10.7)
-		pkcs11.NewAttribute(pkcs11.CKA_ID, keyID),
-		// Common private key attributes (PKCS #11-B 10.9)
-		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
-		pkcs11.NewAttribute(pkcs11.CKA_DECRYPT, true),
-		pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
-	}
-
-	pubHandle, privHandle, err := tk.module.GenerateKeyPair(tk.session, req.Mechanisms(), publicKeyTemplate, privateKeyTemplate)
-	if err != nil {
-		return nil, err
-	}
-
-	pub, err := tk.ExportPublicKey(pubHandle)
-	if err != nil {
-		return nil, err
-
-	}
-
-	return &KeyPair{tk, pub, privHandle}, nil
-}
-
-// FindKeyPair looks up a key pair inside the token with the public key.
-func (tk *Token) FindKeyPair(pub crypto.PublicKey) (*KeyPair, error) {
-	// First, looks up the given public key in the token, and returns get
-	// its object handle if found.
-	kp, err := parseKeyParams(pub)
-	if err != nil {
-		return nil, err
-	}
-
-	pubHandle, err := tk.FindObject(kp.Attrs())
-	if err != nil {
-		return nil, err
-	}
-
-	// Then looks up the private key with matching CKA_ID of the given public key handle.
-	publicKeyID, err := tk.GetAttribute(pubHandle, pkcs11.CKA_ID)
-	if err != nil {
-		return nil, err
-	}
-
-	privHandle, err := tk.FindObject([]*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
-		pkcs11.NewAttribute(pkcs11.CKA_ID, publicKeyID),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &KeyPair{tk, pub, privHandle}, nil
-}
-
 // ExportPublicKey retrieves the public key with given object handle.
 func (tk *Token) ExportPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
 	value, err := tk.GetAttribute(handle, pkcs11.CKA_KEY_TYPE)
@@ -194,15 +112,15 @@ func (tk *Token) ExportPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, 
 
 	switch keyType {
 	case pkcs11.CKK_RSA:
-		kp := new(rsaKeyParams)
-		kp.modulus, _ = tk.GetAttribute(handle, pkcs11.CKA_MODULUS)
-		kp.exponent, _ = tk.GetAttribute(handle, pkcs11.CKA_PUBLIC_EXPONENT)
-		return kp.Key()
+		key := new(rsaPublicKey)
+		key.modulus, _ = tk.GetAttribute(handle, pkcs11.CKA_MODULUS)
+		key.publicExponent, _ = tk.GetAttribute(handle, pkcs11.CKA_PUBLIC_EXPONENT)
+		return key.CryptoKey()
 	case pkcs11.CKK_EC:
-		kp := new(ecdsaKeyParams)
-		kp.ecParams, _ = tk.GetAttribute(handle, pkcs11.CKA_EC_PARAMS)
-		kp.ecPoint, _ = tk.GetAttribute(handle, pkcs11.CKA_EC_POINT)
-		return kp.Key()
+		key := new(ecdsaPublicKey)
+		key.ecParams, _ = tk.GetAttribute(handle, pkcs11.CKA_EC_PARAMS)
+		key.ecPoint, _ = tk.GetAttribute(handle, pkcs11.CKA_EC_POINT)
+		return key.CryptoKey()
 	default:
 		return nil, errors.New("unknown key type")
 	}

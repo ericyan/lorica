@@ -1,6 +1,7 @@
 package cryptoki
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"encoding/asn1"
@@ -19,20 +20,24 @@ var curveOIDs = map[elliptic.Curve]asn1.ObjectIdentifier{
 
 // ecdsaKeyRequest contains parameters for generating ECDSA key pairs.
 type ecdsaKeyRequest struct {
+	*genericKeyRequest
+
 	curve elliptic.Curve
 }
 
-// newECDSAKeyRequest returns a prime256v1 EC(DSA) key request.
-func newECDSAKeyRequest(size int) (*ecdsaKeyRequest, error) {
+// newECDSAKeyRequest returns a ECDSA key request.
+func newECDSAKeyRequest(label string, size int) (*ecdsaKeyRequest, error) {
+	gkr := &genericKeyRequest{label}
+
 	switch size {
 	case 224:
-		return &ecdsaKeyRequest{elliptic.P224()}, nil
+		return &ecdsaKeyRequest{gkr, elliptic.P224()}, nil
 	case 256:
-		return &ecdsaKeyRequest{elliptic.P256()}, nil
+		return &ecdsaKeyRequest{gkr, elliptic.P256()}, nil
 	case 384:
-		return &ecdsaKeyRequest{elliptic.P384()}, nil
+		return &ecdsaKeyRequest{gkr, elliptic.P384()}, nil
 	case 521:
-		return &ecdsaKeyRequest{elliptic.P521()}, nil
+		return &ecdsaKeyRequest{gkr, elliptic.P521()}, nil
 	default:
 		return nil, errors.New("unknown elliptic curve")
 	}
@@ -40,7 +45,7 @@ func newECDSAKeyRequest(size int) (*ecdsaKeyRequest, error) {
 
 // Algo returns the requested key algorithm, "ecdsa", as a string.
 func (kr *ecdsaKeyRequest) Algo() string {
-	return "ecdsa"
+	return ECDSA
 }
 
 // Size returns the requested key size, referring to a named curve.
@@ -54,21 +59,23 @@ func (kr *ecdsaKeyRequest) Mechanisms() []*pkcs11.Mechanism {
 	return []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_EC_KEY_PAIR_GEN, nil)}
 }
 
-// Attrs returns the PKCS#11 public key object attributes for the ECDSA
-// key request (PKCS #11-M1 6.3.3).
-func (kr *ecdsaKeyRequest) Attrs() []*pkcs11.Attribute {
+// PublicAttrs returns the PKCS#11 public key object attributes for the
+// ECDSA key request (PKCS #11-M1 6.3.3).
+func (kr *ecdsaKeyRequest) PublicAttrs() []*pkcs11.Attribute {
 	ecParams, _ := asn1.Marshal(curveOIDs[kr.curve])
-	return []*pkcs11.Attribute{
+	return append(kr.genericKeyRequest.PublicAttrs(),
 		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
-	}
+	)
 }
 
-type ecdsaKeyParams struct {
+// ecdsaPublicKey represents an ECDSA public key.
+type ecdsaPublicKey struct {
 	ecParams []byte
 	ecPoint  []byte
 }
 
-func parseECDSAKeyParams(key *ecdsa.PublicKey) (*ecdsaKeyParams, error) {
+// newECDSAPublicKey returns an ecdsaPublicKey using a crypto.PublicKey.
+func newECDSAPublicKey(key *ecdsa.PublicKey) (*ecdsaPublicKey, error) {
 	curveOID, ok := curveOIDs[key.Curve]
 	if !ok {
 		return nil, errors.New("unknown elliptic curve")
@@ -89,29 +96,28 @@ func parseECDSAKeyParams(key *ecdsa.PublicKey) (*ecdsaKeyParams, error) {
 		return nil, err
 	}
 
-	return &ecdsaKeyParams{ecParams, ecPoint}, nil
+	return &ecdsaPublicKey{ecParams, ecPoint}, nil
 }
 
 // Attrs returns the PKCS#11 public key object attributes for the ECDSA
-// public key. if the underling public key is undefined, no error will
-// be returned, but the attribute values will be nil.
-func (kp *ecdsaKeyParams) Attrs() []*pkcs11.Attribute {
+// public key.
+func (key *ecdsaPublicKey) Attrs() []*pkcs11.Attribute {
 	return []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
 		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_EC),
-		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, kp.ecParams),
-		pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, kp.ecPoint),
+		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, key.ecParams),
+		pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, key.ecPoint),
 	}
 }
 
-// Key recreates the public key using the key params.
-func (kp *ecdsaKeyParams) Key() (*ecdsa.PublicKey, error) {
-	if kp.ecParams == nil {
-		return nil, errors.New("missing EC params")
+// CryptoKey recreates the crypto.PublicKey.
+func (key *ecdsaPublicKey) CryptoKey() (crypto.PublicKey, error) {
+	if key.ecParams == nil || key.ecPoint == nil {
+		return nil, errors.New("invalid ecdsaPublicKey")
 	}
 
 	var curveOID asn1.ObjectIdentifier
-	_, err := asn1.Unmarshal(kp.ecParams, &curveOID)
+	_, err := asn1.Unmarshal(key.ecParams, &curveOID)
 	if err != nil {
 		return nil, err
 	}
@@ -127,12 +133,8 @@ func (kp *ecdsaKeyParams) Key() (*ecdsa.PublicKey, error) {
 		return nil, errors.New("invalid EC params")
 	}
 
-	if kp.ecPoint == nil {
-		return nil, errors.New("missing EC point")
-	}
-
 	var ecPoint asn1.RawValue
-	_, err = asn1.Unmarshal(kp.ecPoint, &ecPoint)
+	_, err = asn1.Unmarshal(key.ecPoint, &ecPoint)
 	if err != nil {
 		return nil, err
 	}
