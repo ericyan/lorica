@@ -98,34 +98,6 @@ func (tk *Token) Info() (pkcs11.TokenInfo, error) {
 	return tk.module.GetTokenInfo(tk.slotID)
 }
 
-// ExportPublicKey retrieves the public key with given object handle.
-func (tk *Token) ExportPublicKey(handle pkcs11.ObjectHandle) (crypto.PublicKey, error) {
-	value, err := tk.GetAttribute(handle, pkcs11.CKA_KEY_TYPE)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(value) == 0 {
-		return nil, errors.New("invalid public key object")
-	}
-	keyType := value[0]
-
-	switch keyType {
-	case pkcs11.CKK_RSA:
-		key := new(rsaPublicKey)
-		key.modulus, _ = tk.GetAttribute(handle, pkcs11.CKA_MODULUS)
-		key.publicExponent, _ = tk.GetAttribute(handle, pkcs11.CKA_PUBLIC_EXPONENT)
-		return key.CryptoKey()
-	case pkcs11.CKK_EC:
-		key := new(ecdsaPublicKey)
-		key.ecParams, _ = tk.GetAttribute(handle, pkcs11.CKA_EC_PARAMS)
-		key.ecPoint, _ = tk.GetAttribute(handle, pkcs11.CKA_EC_POINT)
-		return key.CryptoKey()
-	default:
-		return nil, errors.New("unknown key type")
-	}
-}
-
 // Sign signs msg with the private key inside the token. The caller is
 // responsibile to compute the message digest.
 func (tk *Token) Sign(mech uint, msg []byte, key pkcs11.ObjectHandle) ([]byte, error) {
@@ -177,4 +149,40 @@ func (tk *Token) GetAttribute(obj pkcs11.ObjectHandle, typ uint) ([]byte, error)
 	}
 
 	return attr[0].Value, nil
+}
+
+// GetUintAttribute returns the value of a single object attribute as uint.
+func (tk *Token) GetUintAttribute(obj pkcs11.ObjectHandle, typ uint) (uint, error) {
+	value, err := tk.GetAttribute(obj, typ)
+	if err != nil {
+		return 0, err
+	}
+
+	if len(value) == 0 {
+		return 0, errors.New("empty attribute")
+	}
+	return uint(value[0]), nil
+}
+
+// ExportPublicKey returns the public key object as crypto.PublicKey.
+func (tk *Token) ExportPublicKey(pub pkcs11.ObjectHandle) (crypto.PublicKey, error) {
+	keyType, err := tk.GetUintAttribute(pub, pkcs11.CKA_KEY_TYPE)
+	if err != nil {
+		return nil, err
+	}
+
+	switch keyType {
+	case pkcs11.CKK_RSA:
+		key := new(rsaPublicKey)
+		key.modulus, _ = tk.GetAttribute(pub, pkcs11.CKA_MODULUS)
+		key.publicExponent, _ = tk.GetAttribute(pub, pkcs11.CKA_PUBLIC_EXPONENT)
+		return key.CryptoKey()
+	case pkcs11.CKK_EC:
+		key := new(ecdsaPublicKey)
+		key.ecParams, _ = tk.GetAttribute(pub, pkcs11.CKA_EC_PARAMS)
+		key.ecPoint, _ = tk.GetAttribute(pub, pkcs11.CKA_EC_POINT)
+		return key.CryptoKey()
+	default:
+		return nil, errors.New("unknown key type")
+	}
 }
