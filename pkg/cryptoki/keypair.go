@@ -84,10 +84,10 @@ func (kp *KeyPair) Public() crypto.PublicKey {
 //
 // For ECDSA, the resulting signature will be a DER-serialised, ASN.1
 // signature structure.
-func (kp *KeyPair) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+func (kp *KeyPair) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
 	hash := opts.HashFunc()
 	if len(digest) != hash.Size() {
-		return nil, errors.New("input massage must be hashed")
+		return nil, errors.New("input is not a digest")
 	}
 
 	var mech uint
@@ -95,47 +95,30 @@ func (kp *KeyPair) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (
 	case *rsa.PublicKey:
 		if _, ok := opts.(*rsa.PSSOptions); ok {
 			mech = pkcs11.CKM_RSA_PKCS_PSS
-
-			// TODO: Support the PKCS #1 RSA PSS mechanism.
-			return nil, errors.New("unsupported mechanism")
+		} else {
+			mech = pkcs11.CKM_RSA_PKCS
 		}
-
-		mech = pkcs11.CKM_RSA_PKCS
-
-		// The PKCS #1 v1.5 RSA mechanism	corresponds only to the part that
-		// involves RSA; it does not compute the DigestInfo, which is  a DER-
-		// serialised ASN.1 struct:
-		//
-		//	DigestInfo ::= SEQUENCE {
-		//		digestAlgorithm AlgorithmIdentifier,
-		//		digest OCTET STRING
-		//	}
-		//
-		// For performance, we precompute a prefix of the digest value that
-		// makes a valid ASN.1 DER string.
-		var prefix []byte
-		switch opts.HashFunc() {
-		case crypto.MD5:
-			prefix = []byte{0x30, 0x20, 0x30, 0x0c, 0x06, 0x08, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x02, 0x05, 0x05, 0x00, 0x04, 0x10}
-		case crypto.SHA1:
-			prefix = []byte{0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14}
-		case crypto.SHA224:
-			prefix = []byte{0x30, 0x2d, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x04, 0x05, 0x00, 0x04, 0x1c}
-		case crypto.SHA256:
-			prefix = []byte{0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20}
-		case crypto.SHA384:
-			prefix = []byte{0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30}
-		case crypto.SHA512:
-			prefix = []byte{0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40}
-		default:
-			return nil, errors.New("unsupported hash function")
-		}
-		digest = append(prefix, digest...)
 	case *ecdsa.PublicKey:
 		mech = pkcs11.CKM_ECDSA
 	default:
-		return nil, fmt.Errorf("unrecognized key type %T", kp.pub)
+		return nil, fmt.Errorf("unsupported key type: %T", kp.pub)
 	}
 
-	return kp.tk.Sign(mech, digest, kp.privHandle)
+	// TODO: Add support for the RSASSA-PSS (for TLS 1.3).
+	if mech == pkcs11.CKM_RSA_PKCS_PSS {
+		return nil, errors.New("RSASSA-PSS not supported")
+	}
+
+	// The PKCS #1 v1.5 RSA mechanism	corresponds only to the part that
+	// involves RSA; so we will need to compute the DigestInfo here.
+	if mech == pkcs11.CKM_RSA_PKCS {
+		prefix, ok := pkcs1v15DigestPrefixes[hash]
+		if !ok {
+			return nil, errors.New("unsupported hash function")
+		}
+
+		digest = append(prefix, digest...)
+	}
+
+	return kp.tk.Sign(digest, kp.privHandle, mech)
 }

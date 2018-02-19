@@ -98,17 +98,6 @@ func (tk *Token) Info() (pkcs11.TokenInfo, error) {
 	return tk.module.GetTokenInfo(tk.slotID)
 }
 
-// Sign signs msg with the private key inside the token. The caller is
-// responsibile to compute the message digest.
-func (tk *Token) Sign(mech uint, msg []byte, key pkcs11.ObjectHandle) ([]byte, error) {
-	m := []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
-	if err := tk.module.SignInit(tk.session, m, key); err != nil {
-		return nil, err
-	}
-
-	return tk.module.Sign(tk.session, msg)
-}
-
 // FindObject returns the first object it found that matches the query.
 func (tk *Token) FindObject(query []*pkcs11.Attribute) (pkcs11.ObjectHandle, error) {
 	err := tk.module.FindObjectsInit(tk.session, query)
@@ -185,4 +174,14 @@ func (tk *Token) ExportPublicKey(pub pkcs11.ObjectHandle) (crypto.PublicKey, err
 	default:
 		return nil, errors.New("unknown key type")
 	}
+}
+
+// Sign signs msg the with the private key using designated mechanism.
+func (tk *Token) Sign(msg []byte, priv pkcs11.ObjectHandle, mech uint) ([]byte, error) {
+	m := []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
+	if err := tk.module.SignInit(tk.session, m, priv); err != nil {
+		return nil, err
+	}
+
+	return tk.module.Sign(tk.session, msg)
 }
