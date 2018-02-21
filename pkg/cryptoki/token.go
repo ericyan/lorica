@@ -12,33 +12,14 @@ import (
 type Token struct {
 	module *pkcs11.Ctx
 	slotID uint
+	pin    string
 
-	session pkcs11.SessionHandle
-}
-
-// findSlot retrieves ID of the slot with matching token label.
-func findSlot(module *pkcs11.Ctx, tokenLabel string) (slotID uint, err error) {
-	slots, err := module.GetSlotList(true)
-	if err != nil {
-		return slotID, fmt.Errorf("failed to get slot list: %s", err)
-	}
-
-	for _, id := range slots {
-		tokenInfo, err := module.GetTokenInfo(id)
-		if err != nil {
-			return slotID, fmt.Errorf("failed to get token info: %s", err)
-		}
-
-		if tokenInfo.Label == tokenLabel {
-			return id, nil
-		}
-	}
-
-	return slotID, fmt.Errorf("no slot with token label '%q'", tokenLabel)
+	roSession *pkcs11.SessionHandle
+	rwSession *pkcs11.SessionHandle
 }
 
 // OpenToken opens a new session with the given cryptographic token.
-func OpenToken(modulePath, tokenLabel, pin string, readOnly bool) (*Token, error) {
+func OpenToken(modulePath, tokenLabel, pin string) (*Token, error) {
 	module := pkcs11.New(modulePath)
 	if module == nil {
 		return nil, fmt.Errorf("failed to load module '%s'", modulePath)
@@ -49,48 +30,83 @@ func OpenToken(modulePath, tokenLabel, pin string, readOnly bool) (*Token, error
 		return nil, err
 	}
 
-	slotID, err := findSlot(module, tokenLabel)
+	slots, err := module.GetSlotList(true)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get slot list: %s", err)
 	}
 
+	var slotID uint
+	for _, id := range slots {
+		tokenInfo, err := module.GetTokenInfo(id)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get token info: %s", err)
+		}
+
+		if tokenInfo.Label == tokenLabel {
+			slotID = id
+			break
+		}
+	}
+
+	return &Token{module, slotID, pin, nil, nil}, nil
+}
+
+// openSession opens a new session and logs in with the PIN.
+func (tk *Token) openSession(readOnly bool) (pkcs11.SessionHandle, error) {
 	var flags uint
 	if readOnly {
 		flags = pkcs11.CKF_SERIAL_SESSION
 	} else {
 		flags = pkcs11.CKF_SERIAL_SESSION | pkcs11.CKF_RW_SESSION
 	}
-	session, err := module.OpenSession(slotID, flags)
+
+	sh, err := tk.module.OpenSession(tk.slotID, flags)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	// Log in as a normal user with given PIN.
-	//
-	// NOTE: Login status is application-wide, not per session. It is fine
-	// if the token complains user already logged in.
-	err = module.Login(session, pkcs11.CKU_USER, pin)
+	// Login status is application-wide, not per session. It is fine if
+	// user already logged in.
+	err = tk.module.Login(sh, pkcs11.CKU_USER, tk.pin)
 	if err != nil && err != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
-		module.CloseSession(session)
-		return nil, err
+		tk.module.CloseSession(sh)
+		return 0, err
 	}
 
-	return &Token{module, slotID, session}, nil
+	return sh, nil
 }
 
-// Close closes the current session with the token.
-//
-// NOTE: We do not explicitly log out the session or unload the module
-// here, as it may cause problem if there are multiple sessions active.
-// In general, it will log out once the last session is closed and the
-// module will be unloaded at the end of the process.
-func (tk *Token) Close() error {
-	err := tk.module.CloseSession(tk.session)
-	if err != nil {
-		return fmt.Errorf("failed to close session: %s", err)
+// GetSession returns a writable session with the token.
+func (tk *Token) GetSession() (pkcs11.SessionHandle, error) {
+	if tk.rwSession == nil {
+		sh, err := tk.openSession(false)
+		if err != nil {
+			return 0, err
+		}
+
+		tk.rwSession = &sh
 	}
 
-	return nil
+	return *tk.rwSession, nil
+}
+
+// GetReadOnlySession returns a read-only session with the token.
+func (tk *Token) GetReadOnlySession() (pkcs11.SessionHandle, error) {
+	if tk.roSession == nil {
+		sh, err := tk.openSession(true)
+		if err != nil {
+			return 0, err
+		}
+
+		tk.roSession = &sh
+	}
+
+	return *tk.roSession, nil
+}
+
+// Close closes all sessions with the token.
+func (tk *Token) Close() error {
+	return tk.module.CloseAllSessions(tk.slotID)
 }
 
 // Info obtains information about the token.
@@ -100,17 +116,22 @@ func (tk *Token) Info() (pkcs11.TokenInfo, error) {
 
 // FindObject returns the first object it found that matches the query.
 func (tk *Token) FindObject(query []*pkcs11.Attribute) (pkcs11.ObjectHandle, error) {
-	err := tk.module.FindObjectsInit(tk.session, query)
+	sh, err := tk.GetReadOnlySession()
 	if err != nil {
 		return 0, err
 	}
 
-	result, _, err := tk.module.FindObjects(tk.session, 1)
+	err = tk.module.FindObjectsInit(sh, query)
 	if err != nil {
 		return 0, err
 	}
 
-	err = tk.module.FindObjectsFinal(tk.session)
+	result, _, err := tk.module.FindObjects(sh, 1)
+	if err != nil {
+		return 0, err
+	}
+
+	err = tk.module.FindObjectsFinal(sh)
 	if err != nil {
 		return 0, err
 	}
@@ -126,7 +147,12 @@ func (tk *Token) FindObject(query []*pkcs11.Attribute) (pkcs11.ObjectHandle, err
 // are multiple attributes of the same type, it only returns the value
 // of the first one.
 func (tk *Token) GetAttribute(obj pkcs11.ObjectHandle, typ uint) ([]byte, error) {
-	attr, err := tk.module.GetAttributeValue(tk.session, obj, []*pkcs11.Attribute{
+	sh, err := tk.GetReadOnlySession()
+	if err != nil {
+		return nil, err
+	}
+
+	attr, err := tk.module.GetAttributeValue(sh, obj, []*pkcs11.Attribute{
 		pkcs11.NewAttribute(typ, nil),
 	})
 	if err != nil {
@@ -178,10 +204,15 @@ func (tk *Token) ExportPublicKey(pub pkcs11.ObjectHandle) (crypto.PublicKey, err
 
 // Sign signs msg the with the private key using designated mechanism.
 func (tk *Token) Sign(msg []byte, priv pkcs11.ObjectHandle, mech uint) ([]byte, error) {
-	m := []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
-	if err := tk.module.SignInit(tk.session, m, priv); err != nil {
+	sh, err := tk.GetSession()
+	if err != nil {
 		return nil, err
 	}
 
-	return tk.module.Sign(tk.session, msg)
+	m := []*pkcs11.Mechanism{pkcs11.NewMechanism(mech, nil)}
+	if err := tk.module.SignInit(sh, m, priv); err != nil {
+		return nil, err
+	}
+
+	return tk.module.Sign(sh, msg)
 }

@@ -73,8 +73,7 @@ func main() {
 		}
 	}
 
-	// FIXME: Only init command requires a R/W session.
-	tk, err := cryptoki.OpenToken(opts.module, opts.label, opts.pin, false)
+	tk, err := cryptoki.OpenToken(opts.module, opts.label, opts.pin)
 	if err != nil {
 		log.Fatal(err)
 	}

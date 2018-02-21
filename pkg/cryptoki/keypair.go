@@ -26,7 +26,12 @@ func (tk *Token) GenerateKeyPair(label string, algo string, size int) (*KeyPair,
 		return nil, err
 	}
 
-	pubHandle, privHandle, err := tk.module.GenerateKeyPair(tk.session, kr.Mechanisms(), kr.PublicAttrs(), kr.PrivateAttrs())
+	sh, err := tk.GetSession()
+	if err != nil {
+		return nil, err
+	}
+
+	pubHandle, privHandle, err := tk.module.GenerateKeyPair(sh, kr.Mechanisms(), kr.PublicAttrs(), kr.PrivateAttrs())
 	if err != nil {
 		return nil, err
 	}
