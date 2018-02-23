@@ -25,5 +25,5 @@ func Sign(tk *cryptoki.Token, cfg *ca.Config, caPEM, csrPEM []byte) ([]byte, err
 		return nil, err
 	}
 
-	return ca.Sign(csrPEM)
+	return ca.SignPEM(csrPEM)
 }
