@@ -2,7 +2,7 @@ package procedure
 
 import (
 	"github.com/cloudflare/cfssl/csr"
-	"github.com/ericyan/lorica/internal/ca"
+	"github.com/ericyan/lorica/pkg/ca"
 	"github.com/ericyan/lorica/pkg/cryptoki"
 )
 
