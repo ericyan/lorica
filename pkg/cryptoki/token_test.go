@@ -1,32 +1,29 @@
 package cryptoki
 
 import (
-	"fmt"
-	"os"
+	"testing"
+
+	"github.com/ericyan/lorica/pkg/cryptoki/internal/softhsm2"
 )
 
-// ExampleToken demonstrates how to work with a token.
-//
-// It expects a SoftHSM2 token labeled lorica_test present and the token
-// should be initialized with user PIN 123456.
-func ExampleToken() {
-	token, err := OpenToken("/usr/lib/softhsm/libsofthsm2.so", "lorica_test", "123456", true)
+func TestSoftHSM2(t *testing.T) {
+	hsm, err := softhsm2.Setup()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		t.Fatal(err)
 	}
-	defer token.Close()
+	defer hsm.Destroy()
 
-	info, err := token.Info()
+	tk, err := OpenToken(hsm.ModulePath, hsm.TokenLabel, hsm.PIN)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		t.Error(err)
 	}
 
-	fmt.Println(info.Label)
-	fmt.Println(info.Model)
+	info, err := tk.Info()
+	if err != nil {
+		t.Error(err)
+	}
 
-	// Output:
-	// lorica_test
-	// SoftHSM v2
+	if info.Model != "SoftHSM v2" {
+		t.Errorf("unexpected token model: %s", info.Model)
+	}
 }
