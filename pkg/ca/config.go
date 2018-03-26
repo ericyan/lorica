@@ -20,7 +20,7 @@ type Config struct {
 	ExpiryString string              `json:"expiry"`
 	CAConstraint config.CAConstraint `json:"ca_constraint"`
 
-	Database *dbconf.DBConfig `json:"db,omitempty"`
+	Database *dbconf.DBConfig `json:"db"`
 }
 
 // DefaultConfig defines the default configuration for a CA.
