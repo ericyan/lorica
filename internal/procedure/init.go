@@ -27,7 +27,7 @@ func Init(tk *cryptoki.Token, cfg *ca.Config, selfSign bool) ([]byte, error) {
 			return nil, err
 		}
 
-		return ca.SignPEM(csrPEM)
+		return ca.Issue(csrPEM)
 	}
 
 	return csrPEM, nil

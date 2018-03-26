@@ -1,6 +1,8 @@
 package ca
 
 import (
+	"errors"
+
 	"github.com/cloudflare/cfssl/certdb"
 	"github.com/cloudflare/cfssl/certdb/dbconf"
 	"github.com/ericyan/lorica/internal/certsql"
@@ -33,6 +35,10 @@ CREATE TABLE IF NOT EXISTS ocsp_responses (
 `
 
 func openDB(dbCfg *dbconf.DBConfig) (certdb.Accessor, error) {
+	if dbCfg == nil {
+		return nil, errors.New("nil db config")
+	}
+
 	db, err := sqlx.Open(dbCfg.DriverName, dbCfg.DataSourceName)
 	if err != nil {
 		return nil, err
