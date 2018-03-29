@@ -128,6 +128,17 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+	case "revoke":
+		caPEM, err := cliutil.ReadFile(opts.ca)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		serial := args[0]
+		err = procedure.Revoke(tk, cfg, caPEM, serial)
+		if err != nil {
+			log.Fatal(err)
+		}
 	default:
 		fmt.Printf("invalid command: %s\n", command)
 		os.Exit(2)

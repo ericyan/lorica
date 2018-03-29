@@ -12,6 +12,7 @@ type CertificationAuthority struct {
 	db certdb.Accessor
 
 	Issuer
+	Revoker
 }
 
 // New returns a new CA. If the CA does not have a certificate yet,
@@ -32,5 +33,10 @@ func New(cert *x509.Certificate, cfg *Config, key crypto.Signer) (*Certification
 		return nil, err
 	}
 
-	return &CertificationAuthority{db, issuer}, nil
+	revoker, err := NewRevoker(db)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CertificationAuthority{db, issuer, revoker}, nil
 }
