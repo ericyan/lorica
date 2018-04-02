@@ -34,7 +34,11 @@ CREATE TABLE IF NOT EXISTS ocsp_responses (
 );
 `
 
-func openDB(dbCfg *dbconf.DBConfig) (certdb.Accessor, error) {
+type database struct {
+	*sqlx.DB
+}
+
+func openDB(dbCfg *dbconf.DBConfig) (*database, error) {
 	if dbCfg == nil {
 		return nil, errors.New("nil db config")
 	}
@@ -49,5 +53,9 @@ func openDB(dbCfg *dbconf.DBConfig) (certdb.Accessor, error) {
 		return nil, err
 	}
 
-	return certsql.NewAccessor(db), nil
+	return &database{db}, nil
+}
+
+func (db *database) Accessor() certdb.Accessor {
+	return certsql.NewAccessor(db.DB)
 }

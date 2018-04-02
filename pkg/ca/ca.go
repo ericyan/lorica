@@ -3,13 +3,11 @@ package ca
 import (
 	"crypto"
 	"crypto/x509"
-
-	"github.com/cloudflare/cfssl/certdb"
 )
 
 // CertificationAuthority represents a certification authority.
 type CertificationAuthority struct {
-	db certdb.Accessor
+	db *database
 
 	Issuer
 	Revoker
@@ -28,12 +26,12 @@ func New(cert *x509.Certificate, cfg *Config, key crypto.Signer) (*Certification
 		return nil, err
 	}
 
-	issuer, err := NewIssuer(key, cert, policy, db)
+	issuer, err := NewIssuer(key, cert, policy, db.Accessor())
 	if err != nil {
 		return nil, err
 	}
 
-	revoker, err := NewRevoker(db)
+	revoker, err := NewRevoker(db.Accessor())
 	if err != nil {
 		return nil, err
 	}
