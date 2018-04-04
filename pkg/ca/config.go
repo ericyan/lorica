@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cloudflare/cfssl/certdb/dbconf"
 	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/csr"
 )
@@ -20,7 +19,8 @@ type Config struct {
 	ExpiryString string              `json:"expiry"`
 	CAConstraint config.CAConstraint `json:"ca_constraint"`
 
-	Database *dbconf.DBConfig `json:"db"`
+	SelfSign bool   `json:"self_sign"`
+	CAFile   string `json:"ca_file"`
 }
 
 // DefaultConfig defines the default configuration for a CA.

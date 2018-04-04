@@ -3,17 +3,10 @@ package ca
 import (
 	"bytes"
 	"testing"
-
-	"github.com/cloudflare/cfssl/certdb/dbconf"
 )
 
 func openTestingDB() (*database, error) {
-	dbCfg := &dbconf.DBConfig{
-		DriverName:     "sqlite3",
-		DataSourceName: ":memory:",
-	}
-
-	return openDB(dbCfg)
+	return openDB(":memory:")
 }
 
 func TestMetadata(t *testing.T) {

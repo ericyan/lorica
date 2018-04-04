@@ -18,20 +18,18 @@ import (
 
 var flags = flag.NewFlagSet("lorica", flag.ExitOnError)
 var opts struct {
-	module   string
-	label    string
-	pin      string
-	config   string
-	ca       string
-	selfsign bool
-	verbose  bool
+	module  string
+	label   string
+	pin     string
+	config  string
+	ca      string
+	verbose bool
 }
 var cfg *ca.Config
 
 func init() {
 	flags.StringVar(&opts.config, "config", "", "path to configuration file")
 	flags.StringVar(&opts.ca, "ca", "", "database of the signing CA")
-	flags.BoolVar(&opts.selfsign, "selfsign", false, "self-sign the CSR and output the signed certificate")
 	flags.BoolVar(&opts.verbose, "v", false, "increase verbosity")
 }
 
@@ -91,14 +89,14 @@ func main() {
 		fmt.Printf("Token model:\t%s\n", info.Model)
 		fmt.Printf("Serial number:\t%s\n", info.SerialNumber)
 	case "init":
-		ca, err := procedure.Init(tk, cfg, opts.selfsign)
+		ca, err := procedure.Init(tk, cfg)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		var pem []byte
 		var outputFilename string
-		if opts.selfsign {
+		if ca.Certificate() != nil {
 			pem, err = ca.GetMetadata("cert")
 			if err != nil {
 				log.Fatal(err)

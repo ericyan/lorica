@@ -7,8 +7,10 @@
     "ST": "CA",
     "C": "US"
   },
+  "self_sign": true,
   "expiry": "87600h",
   "ca_constraint": {
     "is_ca": true
-  }
+  },
+  "ca_file": "./root.ca"
 }

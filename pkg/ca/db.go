@@ -1,11 +1,9 @@
 package ca
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/cloudflare/cfssl/certdb"
-	"github.com/cloudflare/cfssl/certdb/dbconf"
 	"github.com/ericyan/lorica/internal/certsql"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
@@ -51,12 +49,8 @@ type database struct {
 	*sqlx.DB
 }
 
-func openDB(dbCfg *dbconf.DBConfig) (*database, error) {
-	if dbCfg == nil {
-		return nil, errors.New("nil db config")
-	}
-
-	db, err := sqlx.Open(dbCfg.DriverName, dbCfg.DataSourceName)
+func openDB(dsn string) (*database, error) {
+	db, err := sqlx.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 
-	"github.com/cloudflare/cfssl/certdb/dbconf"
 	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/cloudflare/cfssl/helpers"
@@ -27,14 +26,14 @@ type CertificationAuthority struct {
 }
 
 // Init creates a CA with given config.
-func Init(cfg *Config, kp KeyProvider, selfSign bool) (*CertificationAuthority, error) {
+func Init(cfg *Config, kp KeyProvider) (*CertificationAuthority, error) {
 	req := cfg.CertificateRequest()
 	key, err := kp.GenerateKeyPair(req.CN, req.KeyRequest.Algo(), req.KeyRequest.Size())
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := openDB(cfg.Database)
+	db, err := openDB(cfg.CAFile)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +57,7 @@ func Init(cfg *Config, kp KeyProvider, selfSign bool) (*CertificationAuthority, 
 		return nil, err
 	}
 
-	if selfSign {
+	if cfg.SelfSign {
 		certPEM, err := ca.Issue(csrPEM)
 		if err != nil {
 			return nil, err
@@ -79,7 +78,7 @@ func Init(cfg *Config, kp KeyProvider, selfSign bool) (*CertificationAuthority, 
 
 // Open opens an existing CA.
 func Open(caFile string, kp KeyProvider) (*CertificationAuthority, error) {
-	db, err := openDB(&dbconf.DBConfig{DriverName: "sqlite3", DataSourceName: caFile})
+	db, err := openDB(caFile)
 	if err != nil {
 		return nil, err
 	}
