@@ -20,7 +20,7 @@ type KeyPair struct {
 }
 
 // GenerateKeyPair generates a key pair inside the token.
-func (tk *Token) GenerateKeyPair(label string, algo string, size int) (*KeyPair, error) {
+func (tk *Token) GenerateKeyPair(label string, algo string, size int) (crypto.Signer, error) {
 	kr, err := newKeyRequest(label, algo, size)
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func (tk *Token) GenerateKeyPair(label string, algo string, size int) (*KeyPair,
 }
 
 // FindKeyPair looks up a key pair inside the token with the public key.
-func (tk *Token) FindKeyPair(key crypto.PublicKey) (*KeyPair, error) {
+func (tk *Token) FindKeyPair(key crypto.PublicKey) (crypto.Signer, error) {
 	// First, looks up the given public key in the token, and returns get
 	// its object handle if found.
 	pub, err := newPublicKey(key)

@@ -30,7 +30,7 @@ var cfg *ca.Config
 
 func init() {
 	flags.StringVar(&opts.config, "config", "", "path to configuration file")
-	flags.StringVar(&opts.ca, "ca", "", "certificate of the signing CA")
+	flags.StringVar(&opts.ca, "ca", "", "database of the signing CA")
 	flags.BoolVar(&opts.selfsign, "selfsign", false, "self-sign the CSR and output the signed certificate")
 	flags.BoolVar(&opts.verbose, "v", false, "increase verbosity")
 }
@@ -91,15 +91,26 @@ func main() {
 		fmt.Printf("Token model:\t%s\n", info.Model)
 		fmt.Printf("Serial number:\t%s\n", info.SerialNumber)
 	case "init":
-		pem, err := procedure.Init(tk, cfg, opts.selfsign)
+		ca, err := procedure.Init(tk, cfg, opts.selfsign)
 		if err != nil {
 			log.Fatal(err)
 		}
 
+		var pem []byte
 		var outputFilename string
 		if opts.selfsign {
+			pem, err = ca.GetMetadata("cert")
+			if err != nil {
+				log.Fatal(err)
+			}
+
 			outputFilename = strings.Replace(opts.config, ".json", ".crt.pem", 1)
 		} else {
+			pem, err = ca.GetMetadata("csr")
+			if err != nil {
+				log.Fatal(err)
+			}
+
 			outputFilename = strings.Replace(opts.config, ".json", ".csr.pem", 1)
 		}
 		err = cliutil.WriteFile(outputFilename, pem)
@@ -107,18 +118,13 @@ func main() {
 			log.Fatal(err)
 		}
 	case "sign":
-		caPEM, err := cliutil.ReadFile(opts.ca)
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		csrFilename := args[0]
 		csrPEM, err := cliutil.ReadFile(csrFilename)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		certPEM, err := procedure.Sign(tk, cfg, caPEM, csrPEM)
+		certPEM, err := procedure.Sign(tk, opts.ca, csrPEM)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -129,13 +135,8 @@ func main() {
 			log.Fatal(err)
 		}
 	case "revoke":
-		caPEM, err := cliutil.ReadFile(opts.ca)
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		serial := args[0]
-		err = procedure.Revoke(tk, cfg, caPEM, serial)
+		err = procedure.Revoke(tk, opts.ca, serial)
 		if err != nil {
 			log.Fatal(err)
 		}
