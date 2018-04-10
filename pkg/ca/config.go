@@ -16,6 +16,7 @@ type Config struct {
 	KeyRequest *csr.BasicKeyRequest `json:"key"`
 
 	Usage        []string            `json:"usages"`
+	CRL          string              `json:"crl_url"`
 	ExpiryString string              `json:"expiry"`
 	CAConstraint config.CAConstraint `json:"ca_constraint"`
 

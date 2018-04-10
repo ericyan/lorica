@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ericyan/lorica/internal/cliutil"
@@ -143,6 +144,21 @@ func main() {
 		}
 
 		err = ca.Revoke(args[0], string(ca.Certificate().SubjectKeyId), 0)
+		if err != nil {
+			log.Fatal(err)
+		}
+	case "crl":
+		ca, err := ca.Open(opts.ca, tk)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		crlDER, err := ca.CRL(30 * 24 * time.Hour)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = cliutil.WriteFile("crl.der", crlDER)
 		if err != nil {
 			log.Fatal(err)
 		}

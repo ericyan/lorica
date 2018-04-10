@@ -2,9 +2,14 @@ package ca
 
 import (
 	"crypto"
+	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math/big"
+	"time"
 
 	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/csr"
@@ -145,4 +150,30 @@ func (ca *CertificationAuthority) Issue(csrPEM []byte) ([]byte, error) {
 // RFC 5280 5.3.1.
 func (ca *CertificationAuthority) Revoke(serial, aki string, reasonCode int) error {
 	return ca.db.Accessor().RevokeCertificate(serial, aki, reasonCode)
+}
+
+// CRL returns a DER-encoded Certificate Revocation List, signed by the CA.
+func (ca *CertificationAuthority) CRL(ttl time.Duration) ([]byte, error) {
+	if ca.cert == nil {
+		return nil, errors.New("nil ca certificate")
+	}
+
+	certs, err := ca.db.Accessor().GetRevokedAndUnexpiredCertificates()
+	if err != nil {
+		return nil, err
+	}
+
+	var revokedCerts []pkix.RevokedCertificate
+	for _, certRecord := range certs {
+		serialInt := new(big.Int)
+		serialInt.SetString(certRecord.Serial, 10)
+
+		revokedCert := pkix.RevokedCertificate{
+			SerialNumber:   serialInt,
+			RevocationTime: certRecord.RevokedAt,
+		}
+		revokedCerts = append(revokedCerts, revokedCert)
+	}
+
+	return ca.cert.CreateCRL(rand.Reader, ca.signer, revokedCerts, time.Now(), time.Now().Add(ttl))
 }
