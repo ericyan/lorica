@@ -4,10 +4,13 @@ import (
 	"crypto"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 
 	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/cloudflare/cfssl/helpers"
+	"github.com/cloudflare/cfssl/signer"
+	"github.com/cloudflare/cfssl/signer/local"
 )
 
 type KeyProvider interface {
@@ -19,10 +22,8 @@ type KeyProvider interface {
 type CertificationAuthority struct {
 	db *database
 
-	cert *x509.Certificate
-
-	Issuer
-	Revoker
+	cert   *x509.Certificate
+	signer signer.Signer
 }
 
 // Init creates a CA with given config.
@@ -113,17 +114,13 @@ func Open(caFile string, kp KeyProvider) (*CertificationAuthority, error) {
 // newCA returns a new CA. If the CA does not have a certificate yet,
 // set cert to nil.
 func newCA(key crypto.Signer, cert *x509.Certificate, policy *config.Signing, db *database) (*CertificationAuthority, error) {
-	issuer, err := NewIssuer(key, cert, policy, db.Accessor())
+	signer, err := local.NewSigner(key, cert, signer.DefaultSigAlgo(key), policy)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create signer: %s", err)
 	}
+	signer.SetDBAccessor(db.Accessor())
 
-	revoker, err := NewRevoker(db.Accessor())
-	if err != nil {
-		return nil, err
-	}
-
-	return &CertificationAuthority{db, cert, issuer, revoker}, nil
+	return &CertificationAuthority{db, cert, signer}, nil
 }
 
 // Certificate returns the certificate of the CA.
@@ -134,4 +131,18 @@ func (ca *CertificationAuthority) Certificate() *x509.Certificate {
 // GetMetadata returns the metadata with given key.
 func (ca *CertificationAuthority) GetMetadata(key string) ([]byte, error) {
 	return ca.db.GetMetadata([]byte(key))
+}
+
+// Issue signs a PEM-encoded CSR and returns the certificate in PEM.
+func (ca *CertificationAuthority) Issue(csrPEM []byte) ([]byte, error) {
+	req := signer.SignRequest{Request: string(csrPEM)}
+
+	return ca.signer.Sign(req)
+}
+
+// Revoke marks the certificate identified by its serial number and
+// authority key identifier revoked. The reasonCode is defined in
+// RFC 5280 5.3.1.
+func (ca *CertificationAuthority) Revoke(serial, aki string, reasonCode int) error {
+	return ca.db.Accessor().RevokeCertificate(serial, aki, reasonCode)
 }
