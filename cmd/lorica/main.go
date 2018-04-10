@@ -10,7 +10,6 @@ import (
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ericyan/lorica/internal/cliutil"
-	"github.com/ericyan/lorica/internal/procedure"
 	"github.com/ericyan/lorica/pkg/ca"
 	"github.com/ericyan/lorica/pkg/cryptoki"
 	"github.com/joho/godotenv"
@@ -89,7 +88,7 @@ func main() {
 		fmt.Printf("Token model:\t%s\n", info.Model)
 		fmt.Printf("Serial number:\t%s\n", info.SerialNumber)
 	case "init":
-		ca, err := procedure.Init(tk, cfg)
+		ca, err := ca.Init(cfg, tk)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -122,7 +121,12 @@ func main() {
 			log.Fatal(err)
 		}
 
-		certPEM, err := procedure.Sign(tk, opts.ca, csrPEM)
+		ca, err := ca.Open(opts.ca, tk)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		certPEM, err := ca.Issue(csrPEM)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -133,8 +137,12 @@ func main() {
 			log.Fatal(err)
 		}
 	case "revoke":
-		serial := args[0]
-		err = procedure.Revoke(tk, opts.ca, serial)
+		ca, err := ca.Open(opts.ca, tk)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = ca.Revoke(args[0], string(ca.Certificate().SubjectKeyId), 0)
 		if err != nil {
 			log.Fatal(err)
 		}
