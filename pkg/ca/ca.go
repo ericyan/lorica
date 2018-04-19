@@ -140,7 +140,18 @@ func (ca *CertificationAuthority) GetMetadata(key string) ([]byte, error) {
 
 // Issue signs a PEM-encoded CSR and returns the certificate in PEM.
 func (ca *CertificationAuthority) Issue(csrPEM []byte) ([]byte, error) {
-	req := signer.SignRequest{Request: string(csrPEM)}
+	var oidExtensionAuthorityKeyId = config.OID([]int{2, 5, 29, 35})
+
+	req := signer.SignRequest{
+		Request: string(csrPEM),
+		Extensions: []signer.Extension{
+			signer.Extension{
+				ID:       oidExtensionAuthorityKeyId,
+				Critical: false,
+				Value:    string(ca.cert.SubjectKeyId),
+			},
+		},
+	}
 
 	return ca.signer.Sign(req)
 }
