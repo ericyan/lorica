@@ -68,12 +68,8 @@ func Init(cfg *Config, kp KeyProvider) (*CertificationAuthority, error) {
 		if err != nil {
 			return nil, err
 		}
-		err = db.SetMetadata([]byte("cert"), certPEM)
-		if err != nil {
-			return nil, err
-		}
 
-		ca.cert, err = helpers.ParseCertificatePEM(certPEM)
+		err = ca.ImportCertificate(certPEM)
 		if err != nil {
 			return nil, err
 		}
@@ -140,6 +136,29 @@ func (ca *CertificationAuthority) Certificate() (*x509.Certificate, error) {
 // Certificate returns the certificate of the CA in PEM encoding.
 func (ca *CertificationAuthority) CertificatePEM() ([]byte, error) {
 	return ca.db.GetMetadata([]byte("cert"))
+}
+
+// ImportCertificate imports the given certificate if the CA does not
+// have one.
+func (ca *CertificationAuthority) ImportCertificate(certPEM []byte) error {
+	if ca.cert != nil {
+		return errors.New("ca cert exists")
+	}
+
+	cert, err := helpers.ParseCertificatePEM(certPEM)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Check signature and compare with original CSR.
+
+	err = ca.db.SetMetadata([]byte("cert"), certPEM)
+	if err != nil {
+		return err
+	}
+
+	ca.cert = cert
+	return nil
 }
 
 // CertificateRequest returns the certificate signing request of the CA.
