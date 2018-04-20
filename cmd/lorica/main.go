@@ -96,21 +96,23 @@ func main() {
 
 		var pem []byte
 		var outputFilename string
-		if ca.Certificate() != nil {
-			pem, err = ca.GetMetadata("cert")
-			if err != nil {
-				log.Fatal(err)
-			}
 
-			outputFilename = strings.Replace(opts.config, ".json", ".crt.pem", 1)
-		} else {
-			pem, err = ca.GetMetadata("csr")
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			outputFilename = strings.Replace(opts.config, ".json", ".csr.pem", 1)
+		pem, err = ca.CertificatePEM()
+		if err != nil {
+			log.Error(err)
 		}
+
+		outputFilename = strings.Replace(opts.config, ".json", ".crt.pem", 1)
+
+		if pem == nil {
+			pem, err = ca.CertificateRequestPEM()
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		outputFilename = strings.Replace(opts.config, ".json", ".csr.pem", 1)
+
 		err = cliutil.WriteFile(outputFilename, pem)
 		if err != nil {
 			log.Fatal(err)
@@ -143,7 +145,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		err = ca.Revoke(args[0], string(ca.Certificate().SubjectKeyId), 0)
+		err = ca.Revoke(args[0], string(ca.KeyID()), 0)
 		if err != nil {
 			log.Fatal(err)
 		}

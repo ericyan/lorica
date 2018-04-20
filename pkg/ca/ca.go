@@ -129,13 +129,39 @@ func newCA(key crypto.Signer, cert *x509.Certificate, policy *config.Signing, db
 }
 
 // Certificate returns the certificate of the CA.
-func (ca *CertificationAuthority) Certificate() *x509.Certificate {
-	return ca.cert
+func (ca *CertificationAuthority) Certificate() (*x509.Certificate, error) {
+	if ca.cert == nil {
+		return nil, errors.New("ca cert unavailable")
+	}
+
+	return ca.cert, nil
 }
 
-// GetMetadata returns the metadata with given key.
-func (ca *CertificationAuthority) GetMetadata(key string) ([]byte, error) {
-	return ca.db.GetMetadata([]byte(key))
+// Certificate returns the certificate of the CA in PEM encoding.
+func (ca *CertificationAuthority) CertificatePEM() ([]byte, error) {
+	return ca.db.GetMetadata([]byte("cert"))
+}
+
+// CertificateRequest returns the certificate signing request of the CA.
+func (ca *CertificationAuthority) CertificateRequest() (*x509.CertificateRequest, error) {
+	csrPEM, err := ca.CertificateRequestPEM()
+	if err != nil {
+		return nil, err
+	}
+
+	return helpers.ParseCSRPEM(csrPEM)
+}
+
+// CertificateRequestPEM returns the certificate signing request of the
+// CA in PEM encoding.
+func (ca *CertificationAuthority) CertificateRequestPEM() ([]byte, error) {
+	return ca.db.GetMetadata([]byte("csr"))
+}
+
+// KeyID returns the identifier of the signing key, which will also be
+// the Authority Key Identifier (AKI) for issued certificates.
+func (ca *CertificationAuthority) KeyID() []byte {
+	return ca.cert.SubjectKeyId
 }
 
 // Issue signs a PEM-encoded CSR and returns the certificate in PEM.
@@ -148,7 +174,7 @@ func (ca *CertificationAuthority) Issue(csrPEM []byte) ([]byte, error) {
 			signer.Extension{
 				ID:       oidExtensionAuthorityKeyId,
 				Critical: false,
-				Value:    string(ca.cert.SubjectKeyId),
+				Value:    string(ca.KeyID()),
 			},
 		},
 	}
