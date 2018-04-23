@@ -57,6 +57,14 @@ func Init(cfg *Config, kp KeyProvider) (*CertificationAuthority, error) {
 	if err != nil {
 		return nil, err
 	}
+	policyJSON, err := json.Marshal(policy)
+	if err != nil {
+		return nil, err
+	}
+	err = db.SetMetadata([]byte("policy"), policyJSON)
+	if err != nil {
+		return nil, err
+	}
 
 	ca, err := newCA(key, nil, policy, db)
 	if err != nil {
