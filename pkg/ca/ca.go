@@ -7,7 +7,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math/big"
 	"time"
 
@@ -27,8 +26,7 @@ type KeyProvider interface {
 type CertificationAuthority struct {
 	db *database
 
-	cert   *x509.Certificate
-	signer signer.Signer
+	signer *local.Signer
 }
 
 // Init creates a CA with given config.
@@ -53,25 +51,23 @@ func Init(cfg *Config, kp KeyProvider) (*CertificationAuthority, error) {
 		return nil, err
 	}
 
+	ca := &CertificationAuthority{db, nil}
+
 	policy, err := cfg.Signing()
 	if err != nil {
 		return nil, err
 	}
-	policyJSON, err := json.Marshal(policy)
-	if err != nil {
-		return nil, err
-	}
-	err = db.SetMetadata([]byte("policy"), policyJSON)
-	if err != nil {
-		return nil, err
-	}
-
-	ca, err := newCA(key, nil, policy, db)
+	err = ca.SetPolicy(policy)
 	if err != nil {
 		return nil, err
 	}
 
 	if cfg.SelfSign {
+		err = ca.initSigner(key, nil)
+		if err != nil {
+			return nil, err
+		}
+
 		certPEM, err := ca.Issue(csrPEM)
 		if err != nil {
 			return nil, err
@@ -92,6 +88,7 @@ func Open(caFile string, kp KeyProvider) (*CertificationAuthority, error) {
 	if err != nil {
 		return nil, err
 	}
+	ca := &CertificationAuthority{db, nil}
 
 	certPEM, err := db.GetMetadata([]byte("cert"))
 	if err != nil {
@@ -107,38 +104,40 @@ func Open(caFile string, kp KeyProvider) (*CertificationAuthority, error) {
 		return nil, err
 	}
 
-	policyJSON, err := db.GetMetadata([]byte("policy"))
-	if err != nil {
-		return nil, err
-	}
-	var policy *config.Signing
-	err = json.Unmarshal(policyJSON, policy)
+	err = ca.initSigner(key, cert)
 	if err != nil {
 		return nil, err
 	}
 
-	return newCA(key, cert, policy, db)
+	return ca, nil
 }
 
-// newCA returns a new CA. If the CA does not have a certificate yet,
-// set cert to nil.
-func newCA(key crypto.Signer, cert *x509.Certificate, policy *config.Signing, db *database) (*CertificationAuthority, error) {
+// initSigner initializes a new signer for the CA. If the CA does not
+// have a certificate yet, set cert to nil.
+func (ca *CertificationAuthority) initSigner(key crypto.Signer, cert *x509.Certificate) error {
+	policy, err := ca.Policy()
+	if err != nil {
+		return err
+	}
+
 	signer, err := local.NewSigner(key, cert, signer.DefaultSigAlgo(key), policy)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create signer: %s", err)
+		return err
 	}
-	signer.SetDBAccessor(db.Accessor())
 
-	return &CertificationAuthority{db, cert, signer}, nil
+	signer.SetDBAccessor(ca.db.Accessor())
+
+	ca.signer = signer
+	return nil
 }
 
 // Certificate returns the certificate of the CA.
 func (ca *CertificationAuthority) Certificate() (*x509.Certificate, error) {
-	if ca.cert == nil {
-		return nil, errors.New("ca cert unavailable")
+	if ca.signer == nil {
+		return nil, errors.New("signer not initialized")
 	}
 
-	return ca.cert, nil
+	return ca.signer.Certificate("", "default")
 }
 
 // Certificate returns the certificate of the CA in PEM encoding.
@@ -149,7 +148,7 @@ func (ca *CertificationAuthority) CertificatePEM() ([]byte, error) {
 // ImportCertificate imports the given certificate if the CA does not
 // have one.
 func (ca *CertificationAuthority) ImportCertificate(certPEM []byte) error {
-	if ca.cert != nil {
+	if cert, _ := ca.Certificate(); cert != nil {
 		return errors.New("ca cert exists")
 	}
 
@@ -165,7 +164,7 @@ func (ca *CertificationAuthority) ImportCertificate(certPEM []byte) error {
 		return err
 	}
 
-	ca.cert = cert
+	ca.initSigner(nil, cert)
 	return nil
 }
 
@@ -188,7 +187,53 @@ func (ca *CertificationAuthority) CertificateRequestPEM() ([]byte, error) {
 // KeyID returns the identifier of the signing key, which will also be
 // the Authority Key Identifier (AKI) for issued certificates.
 func (ca *CertificationAuthority) KeyID() []byte {
-	return ca.cert.SubjectKeyId
+	cert, err := ca.Certificate()
+	if err != nil {
+		return nil
+	}
+
+	return cert.SubjectKeyId
+}
+
+// Policy returns the signing policy of the CA.
+func (ca *CertificationAuthority) Policy() (*config.Signing, error) {
+	if ca.signer != nil {
+		return ca.signer.Policy(), nil
+	}
+
+	policyJSON, err := ca.db.GetMetadata([]byte("policy"))
+	if err != nil {
+		return nil, err
+	}
+	var policy *config.Signing
+	err = json.Unmarshal(policyJSON, policy)
+	if err != nil {
+		return nil, err
+	}
+
+	return policy, nil
+}
+
+// SetPolicy sets the signing policy of the CA.
+func (ca *CertificationAuthority) SetPolicy(policy *config.Signing) error {
+	if !policy.Valid() {
+		return errors.New("invalid policy")
+	}
+
+	policyJSON, err := json.Marshal(policy)
+	if err != nil {
+		return err
+	}
+	err = ca.db.SetMetadata([]byte("policy"), policyJSON)
+	if err != nil {
+		return err
+	}
+
+	if ca.signer != nil {
+		ca.signer.SetPolicy(policy)
+	}
+
+	return nil
 }
 
 // Issue signs a PEM-encoded CSR and returns the certificate in PEM.
@@ -218,8 +263,9 @@ func (ca *CertificationAuthority) Revoke(serial, aki string, reasonCode int) err
 
 // CRL returns a DER-encoded Certificate Revocation List, signed by the CA.
 func (ca *CertificationAuthority) CRL(ttl time.Duration) ([]byte, error) {
-	if ca.cert == nil {
-		return nil, errors.New("nil ca certificate")
+	cert, err := ca.Certificate()
+	if err != nil {
+		return nil, err
 	}
 
 	certs, err := ca.db.Accessor().GetRevokedAndUnexpiredCertificates()
@@ -239,5 +285,5 @@ func (ca *CertificationAuthority) CRL(ttl time.Duration) ([]byte, error) {
 		revokedCerts = append(revokedCerts, revokedCert)
 	}
 
-	return ca.cert.CreateCRL(rand.Reader, ca.signer, revokedCerts, time.Now(), time.Now().Add(ttl))
+	return cert.CreateCRL(rand.Reader, ca.signer, revokedCerts, time.Now(), time.Now().Add(ttl))
 }
