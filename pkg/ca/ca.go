@@ -90,16 +90,16 @@ func Open(caFile string, kp KeyProvider) (*CertificationAuthority, error) {
 	}
 	ca := &CertificationAuthority{db, nil}
 
-	certPEM, err := db.GetMetadata([]byte("cert"))
+	pub, err := ca.PublicKey()
 	if err != nil {
 		return nil, err
 	}
-	cert, err := helpers.ParseCertificatePEM(certPEM)
+	key, err := kp.FindKeyPair(pub)
 	if err != nil {
 		return nil, err
 	}
 
-	key, err := kp.FindKeyPair(cert.PublicKey)
+	cert, err := ca.Certificate()
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +182,19 @@ func (ca *CertificationAuthority) CertificateRequest() (*x509.CertificateRequest
 // CA in PEM encoding.
 func (ca *CertificationAuthority) CertificateRequestPEM() ([]byte, error) {
 	return ca.db.GetMetadata([]byte("csr"))
+}
+
+// PublicKey returns the public key from the CA certificate or CSR.
+func (ca *CertificationAuthority) PublicKey() (crypto.PublicKey, error) {
+	if cert, _ := ca.Certificate(); cert != nil {
+		return cert.PublicKey, nil
+	}
+
+	if csr, _ := ca.CertificateRequest(); csr != nil {
+		return csr.PublicKey, nil
+	}
+
+	return nil, errors.New("no valid csr in db")
 }
 
 // KeyID returns the identifier of the signing key, which will also be
