@@ -3,8 +3,10 @@ package ca
 import (
 	"crypto"
 	"crypto/rand"
+	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/json"
 	"errors"
 	"math/big"
@@ -218,13 +220,33 @@ func (ca *CertificationAuthority) PublicKey() (crypto.PublicKey, error) {
 
 // KeyID returns the identifier of the signing key, which will also be
 // the Authority Key Identifier (AKI) for issued certificates.
-func (ca *CertificationAuthority) KeyID() []byte {
-	cert, err := ca.Certificate()
-	if err != nil {
-		return nil
+func (ca *CertificationAuthority) KeyID() ([]byte, error) {
+	if cert, _ := ca.Certificate(); cert != nil {
+		return cert.SubjectKeyId, nil
 	}
 
-	return cert.SubjectKeyId
+	pub, err := ca.PublicKey()
+	if err != nil {
+		return nil, err
+	}
+
+	pkixPub, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return nil, err
+	}
+
+	var pubKeyInfo struct {
+		Algo      pkix.AlgorithmIdentifier
+		BitString asn1.BitString
+	}
+	_, err = asn1.Unmarshal(pkixPub, &pubKeyInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	hash := sha1.New()
+	hash.Write(pubKeyInfo.BitString.Bytes)
+	return hash.Sum(nil), nil
 }
 
 // Policy returns the signing policy of the CA.
@@ -272,13 +294,18 @@ func (ca *CertificationAuthority) SetPolicy(policy *config.Signing) error {
 func (ca *CertificationAuthority) Issue(csrPEM []byte) ([]byte, error) {
 	var oidExtensionAuthorityKeyId = config.OID([]int{2, 5, 29, 35})
 
+	keyID, err := ca.KeyID()
+	if err != nil {
+		return nil, err
+	}
+
 	req := signer.SignRequest{
 		Request: string(csrPEM),
 		Extensions: []signer.Extension{
 			signer.Extension{
 				ID:       oidExtensionAuthorityKeyId,
 				Critical: false,
-				Value:    string(ca.KeyID()),
+				Value:    string(keyID),
 			},
 		},
 	}

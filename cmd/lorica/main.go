@@ -145,7 +145,12 @@ func main() {
 			log.Fatal(err)
 		}
 
-		err = ca.Revoke(args[0], string(ca.KeyID()), 0)
+		keyID, err := ca.KeyID()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = ca.Revoke(args[0], string(keyID), 0)
 		if err != nil {
 			log.Fatal(err)
 		}
