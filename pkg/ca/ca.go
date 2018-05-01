@@ -12,12 +12,19 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/cloudflare/cfssl/certdb"
 	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/cloudflare/cfssl/helpers"
 	"github.com/cloudflare/cfssl/signer"
 	"github.com/cloudflare/cfssl/signer/local"
 )
+
+type StorageProvider interface {
+	GetMetadata(key []byte) ([]byte, error)
+	SetMetadata(key, value []byte) error
+	Accessor() certdb.Accessor
+}
 
 type KeyProvider interface {
 	GenerateKeyPair(label string, algo string, size int) (crypto.Signer, error)
@@ -26,7 +33,7 @@ type KeyProvider interface {
 
 // CertificationAuthority represents a certification authority.
 type CertificationAuthority struct {
-	db *database
+	sp StorageProvider
 	kp KeyProvider
 
 	signer *local.Signer
@@ -123,7 +130,7 @@ func (ca *CertificationAuthority) initSigner(cert *x509.Certificate) error {
 		return err
 	}
 
-	signer.SetDBAccessor(ca.db.Accessor())
+	signer.SetDBAccessor(ca.sp.Accessor())
 
 	ca.signer = signer
 	return nil
@@ -140,7 +147,7 @@ func (ca *CertificationAuthority) Certificate() (*x509.Certificate, error) {
 
 // Certificate returns the certificate of the CA in PEM encoding.
 func (ca *CertificationAuthority) CertificatePEM() ([]byte, error) {
-	return ca.db.GetMetadata([]byte("cert"))
+	return ca.sp.GetMetadata([]byte("cert"))
 }
 
 // ImportCertificate imports the given certificate if the CA does not
@@ -157,7 +164,7 @@ func (ca *CertificationAuthority) ImportCertificate(certPEM []byte) error {
 
 	// TODO: Check signature and compare with original CSR.
 
-	err = ca.db.SetMetadata([]byte("cert"), certPEM)
+	err = ca.sp.SetMetadata([]byte("cert"), certPEM)
 	if err != nil {
 		return err
 	}
@@ -178,7 +185,7 @@ func (ca *CertificationAuthority) CertificateRequest() (*x509.CertificateRequest
 // CertificateRequestPEM returns the certificate signing request of the
 // CA in PEM encoding.
 func (ca *CertificationAuthority) CertificateRequestPEM() ([]byte, error) {
-	return ca.db.GetMetadata([]byte("csr"))
+	return ca.sp.GetMetadata([]byte("csr"))
 }
 
 // generateCertificateRequestPEM creates a certificate signing request
@@ -197,7 +204,7 @@ func (ca *CertificationAuthority) generateCertificateRequestPEM(req *csr.Certifi
 	if err != nil {
 		return nil, err
 	}
-	err = ca.db.SetMetadata([]byte("csr"), csrPEM)
+	err = ca.sp.SetMetadata([]byte("csr"), csrPEM)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +262,7 @@ func (ca *CertificationAuthority) Policy() (*config.Signing, error) {
 		return ca.signer.Policy(), nil
 	}
 
-	policyJSON, err := ca.db.GetMetadata([]byte("policy"))
+	policyJSON, err := ca.sp.GetMetadata([]byte("policy"))
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +285,7 @@ func (ca *CertificationAuthority) SetPolicy(policy *config.Signing) error {
 	if err != nil {
 		return err
 	}
-	err = ca.db.SetMetadata([]byte("policy"), policyJSON)
+	err = ca.sp.SetMetadata([]byte("policy"), policyJSON)
 	if err != nil {
 		return err
 	}
@@ -317,7 +324,7 @@ func (ca *CertificationAuthority) Issue(csrPEM []byte) ([]byte, error) {
 // authority key identifier revoked. The reasonCode is defined in
 // RFC 5280 5.3.1.
 func (ca *CertificationAuthority) Revoke(serial, aki string, reasonCode int) error {
-	return ca.db.Accessor().RevokeCertificate(serial, aki, reasonCode)
+	return ca.sp.Accessor().RevokeCertificate(serial, aki, reasonCode)
 }
 
 // CRL returns a DER-encoded Certificate Revocation List, signed by the CA.
@@ -327,7 +334,7 @@ func (ca *CertificationAuthority) CRL(ttl time.Duration) ([]byte, error) {
 		return nil, err
 	}
 
-	certs, err := ca.db.Accessor().GetRevokedAndUnexpiredCertificates()
+	certs, err := ca.sp.Accessor().GetRevokedAndUnexpiredCertificates()
 	if err != nil {
 		return nil, err
 	}
