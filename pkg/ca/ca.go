@@ -89,11 +89,7 @@ func Open(caFile string, kp KeyProvider) (*CertificationAuthority, error) {
 	}
 	ca := &CertificationAuthority{db, kp, nil}
 
-	cert, err := ca.Certificate()
-	if err != nil {
-		return nil, err
-	}
-	err = ca.initSigner(cert)
+	err = ca.initSigner(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +100,10 @@ func Open(caFile string, kp KeyProvider) (*CertificationAuthority, error) {
 // initSigner initializes a new signer for the CA. If the CA does not
 // have a certificate yet, set cert to nil.
 func (ca *CertificationAuthority) initSigner(cert *x509.Certificate) error {
+	if caCert, _ := ca.Certificate(); cert == nil && caCert != nil {
+		cert = caCert
+	}
+
 	var pub crypto.PublicKey
 	if cert != nil {
 		pub = cert.PublicKey
