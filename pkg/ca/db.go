@@ -1,6 +1,7 @@
 package ca
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cloudflare/cfssl/certdb"
@@ -72,6 +73,10 @@ func (db *database) GetMetadata(key []byte) ([]byte, error) {
 	err := db.DB.Select(&values, selectMetadataSQL, key)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(values) == 0 {
+		return nil, errors.New("empty value")
 	}
 
 	return values[0], nil
