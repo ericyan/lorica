@@ -158,11 +158,12 @@ func (ca *CertificationAuthority) initSigner(cert *x509.Certificate) error {
 
 // Certificate returns the certificate of the CA.
 func (ca *CertificationAuthority) Certificate() (*x509.Certificate, error) {
-	if ca.signer == nil {
-		return nil, errors.New("signer not initialized")
+	certPEM, err := ca.CertificatePEM()
+	if err != nil {
+		return nil, err
 	}
 
-	return ca.signer.Certificate("", "default")
+	return helpers.ParseCertificatePEM(certPEM)
 }
 
 // Certificate returns the certificate of the CA in PEM encoding.
