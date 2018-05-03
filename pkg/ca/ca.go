@@ -47,32 +47,18 @@ func Init(cfg *Config, kp KeyProvider) (*CertificationAuthority, error) {
 	}
 	ca := &CertificationAuthority{db, kp, nil}
 
-	csrPEM, err := ca.generateCertificateRequestPEM(cfg.CertificateRequest())
-	if err != nil {
-		return nil, err
-	}
-
+	req := cfg.CertificateRequest()
 	policy, err := cfg.Signing()
 	if err != nil {
 		return nil, err
 	}
-	err = ca.SetPolicy(policy)
+	err = ca.init(req, policy)
 	if err != nil {
 		return nil, err
 	}
 
 	if cfg.SelfSign {
-		err = ca.initSigner(nil)
-		if err != nil {
-			return nil, err
-		}
-
-		certPEM, err := ca.Issue(csrPEM)
-		if err != nil {
-			return nil, err
-		}
-
-		err = ca.ImportCertificate(certPEM)
+		err = ca.selfSign()
 		if err != nil {
 			return nil, err
 		}
@@ -95,6 +81,40 @@ func Open(caFile string, kp KeyProvider) (*CertificationAuthority, error) {
 	}
 
 	return ca, nil
+}
+
+// init generates a key pair and creates a certificate signing request
+// for the CA.
+func (ca *CertificationAuthority) init(req *csr.CertificateRequest, policy *config.Signing) error {
+	if csrPEM, _ := ca.CertificateRequestPEM(); csrPEM != nil {
+		return errors.New("ca csr exists")
+	}
+
+	key, err := ca.kp.GenerateKeyPair(req.CN, req.KeyRequest.Algo(), req.KeyRequest.Size())
+	if err != nil {
+		return err
+	}
+
+	csrPEM, err := csr.Generate(key, req)
+	if err != nil {
+		return err
+	}
+	err = ca.sp.SetMetadata([]byte("csr"), csrPEM)
+	if err != nil {
+		return err
+	}
+
+	err = ca.SetPolicy(policy)
+	if err != nil {
+		return err
+	}
+
+	err = ca.initSigner(nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // initSigner initializes a new signer for the CA. If the CA does not
@@ -150,6 +170,21 @@ func (ca *CertificationAuthority) CertificatePEM() ([]byte, error) {
 	return ca.sp.GetMetadata([]byte("cert"))
 }
 
+// selfSign creates a self-signed certificate for the CA.
+func (ca *CertificationAuthority) selfSign() error {
+	csrPEM, err := ca.CertificateRequestPEM()
+	if err != nil {
+		return err
+	}
+
+	certPEM, err := ca.Issue(csrPEM)
+	if err != nil {
+		return err
+	}
+
+	return ca.ImportCertificate(certPEM)
+}
+
 // ImportCertificate imports the given certificate if the CA does not
 // have one.
 func (ca *CertificationAuthority) ImportCertificate(certPEM []byte) error {
@@ -186,30 +221,6 @@ func (ca *CertificationAuthority) CertificateRequest() (*x509.CertificateRequest
 // CA in PEM encoding.
 func (ca *CertificationAuthority) CertificateRequestPEM() ([]byte, error) {
 	return ca.sp.GetMetadata([]byte("csr"))
-}
-
-// generateCertificateRequestPEM creates a certificate signing request
-// for the CA.
-func (ca *CertificationAuthority) generateCertificateRequestPEM(req *csr.CertificateRequest) ([]byte, error) {
-	if csrPEM, _ := ca.CertificateRequestPEM(); csrPEM != nil {
-		return nil, errors.New("ca csr exists")
-	}
-
-	key, err := ca.kp.GenerateKeyPair(req.CN, req.KeyRequest.Algo(), req.KeyRequest.Size())
-	if err != nil {
-		return nil, err
-	}
-
-	csrPEM, err := csr.Generate(key, req)
-	if err != nil {
-		return nil, err
-	}
-	err = ca.sp.SetMetadata([]byte("csr"), csrPEM)
-	if err != nil {
-		return nil, err
-	}
-
-	return csrPEM, nil
 }
 
 // PublicKey returns the public key from the CA certificate or CSR.
