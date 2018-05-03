@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math/big"
@@ -318,13 +319,21 @@ func (ca *CertificationAuthority) Issue(csrPEM []byte) ([]byte, error) {
 		return nil, err
 	}
 
+	type authKeyId struct {
+		KeyIdentifier []byte `asn1:"tag:0"`
+	}
+	aki, err := asn1.Marshal(authKeyId{keyID})
+	if err != nil {
+		return nil, err
+	}
+
 	req := signer.SignRequest{
 		Request: string(csrPEM),
 		Extensions: []signer.Extension{
 			signer.Extension{
 				ID:       oidExtensionAuthorityKeyId,
 				Critical: false,
-				Value:    string(keyID),
+				Value:    hex.EncodeToString(aki),
 			},
 		},
 	}
