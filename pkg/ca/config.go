@@ -15,10 +15,11 @@ type Config struct {
 	Name       csr.Name             `json:"name"`
 	KeyRequest *csr.BasicKeyRequest `json:"key"`
 
-	Usage        []string            `json:"usages"`
-	CRL          string              `json:"crl_url"`
-	ExpiryString string              `json:"expiry"`
-	CAConstraint config.CAConstraint `json:"ca_constraint"`
+	Usage             []string            `json:"usages"`
+	CRL               string              `json:"crl_url"`
+	ExpiryString      string              `json:"expiry"`
+	CAConstraint      config.CAConstraint `json:"ca_constraint"`
+	AllowedExtensions []config.OID        `json:"allowed_extensions"`
 
 	SelfSign bool   `json:"self_sign"`
 	CAFile   string `json:"ca_file"`
@@ -61,9 +62,10 @@ func (cfg *Config) Signing() (*config.Signing, error) {
 	cfsslConfig := &config.Config{
 		Signing: &config.Signing{
 			Default: &config.SigningProfile{
-				Usage:        cfg.Usage,
-				ExpiryString: cfg.ExpiryString,
-				CAConstraint: cfg.CAConstraint,
+				Usage:             cfg.Usage,
+				ExpiryString:      cfg.ExpiryString,
+				CAConstraint:      cfg.CAConstraint,
+				AllowedExtensions: cfg.AllowedExtensions,
 			},
 		},
 	}
