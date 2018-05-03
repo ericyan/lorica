@@ -278,7 +278,7 @@ func (ca *CertificationAuthority) Policy() (*config.Signing, error) {
 		return nil, err
 	}
 	var policy *config.Signing
-	err = json.Unmarshal(policyJSON, policy)
+	err = json.Unmarshal(policyJSON, &policy)
 	if err != nil {
 		return nil, err
 	}
