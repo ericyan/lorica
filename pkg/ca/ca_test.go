@@ -5,7 +5,6 @@ import (
 	"crypto"
 	"testing"
 
-	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/helpers"
 )
 
@@ -92,8 +91,7 @@ func TestUnsignedCA(t *testing.T) {
 
 func TestSelfSignedCA(t *testing.T) {
 	cfg := DefaultConfig
-	cfg.CAConstraint = config.CAConstraint{IsCA: true}
-	cfg.AllowedExtensions = []config.OID{config.OID([]int{2, 5, 29, 35})}
+	cfg.SelfSign = true
 
 	ca, err := newFakeCA(cfg)
 	if err != nil {

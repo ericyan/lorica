@@ -59,6 +59,11 @@ func LoadConfig(data []byte) (*Config, error) {
 
 // Signing returns a CFSSL signing policy derived from the Config.
 func (cfg *Config) Signing() (*config.Signing, error) {
+	if cfg.SelfSign {
+		cfg.CAConstraint.IsCA = true
+		cfg.AllowedExtensions = append(cfg.AllowedExtensions, config.OID([]int{2, 5, 29, 35}))
+	}
+
 	cfsslConfig := &config.Config{
 		Signing: &config.Signing{
 			Default: &config.SigningProfile{
