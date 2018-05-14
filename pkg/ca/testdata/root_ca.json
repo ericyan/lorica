@@ -12,5 +12,5 @@
   "ca_constraint": {
     "is_ca": true
   },
-  "ca_file": "./root.ca"
+  "ca_file": "testdata/root.ca"
 }
