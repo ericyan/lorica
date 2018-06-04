@@ -1,29 +1,19 @@
 package ca_test
 
 import (
-	"crypto"
 	"crypto/ecdsa"
+	"crypto/rsa"
 	"io/ioutil"
 	"os"
 	"testing"
 
-	"github.com/cloudflare/cfssl/helpers"
+	"github.com/ericyan/lorica/internal/mock"
 	"github.com/ericyan/lorica/pkg/ca"
 )
 
-type fakeKeyProvider struct {
-	keyPEM []byte
-}
+var kp = mock.NewKeyProvider("testdata/")
 
-func (kp *fakeKeyProvider) GenerateKeyPair(label string, algo string, size int) (crypto.Signer, error) {
-	return helpers.ParsePrivateKeyPEM(kp.keyPEM)
-}
-
-func (kp *fakeKeyProvider) FindKeyPair(key crypto.PublicKey) (crypto.Signer, error) {
-	return helpers.ParsePrivateKeyPEM(kp.keyPEM)
-}
-
-func initCA(configFile string, kp ca.KeyProvider) (string, error) {
+func initCA(configFile string) (string, error) {
 	config, err := ioutil.ReadFile(configFile)
 	if err != nil {
 		return "", err
@@ -47,13 +37,7 @@ func TestRootCA(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	keyPEM, err := helpers.ReadBytes("testdata/prime256v1.key")
-	if err != nil {
-		t.Fatal(err)
-	}
-	kp := &fakeKeyProvider{keyPEM}
-
-	caFile, err := initCA("testdata/root_ca.json", kp)
+	caFile, err := initCA("testdata/root_ca.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,9 +54,9 @@ func TestRootCA(t *testing.T) {
 	}
 	kpKey, _ := kp.FindKeyPair(caPub)
 
-	a := caPub.(*ecdsa.PublicKey)
-	b := kpKey.Public().(*ecdsa.PublicKey)
-	if a.Curve.Params().Name != b.Curve.Params().Name || a.X.String() != b.X.String() || a.Y.String() != b.Y.String() {
+	a := caPub.(*rsa.PublicKey)
+	b := kpKey.Public().(*rsa.PublicKey)
+	if a.N.String() != b.N.String() || a.E != b.E {
 		t.Fatal("ca public key mismatch")
 	}
 }
@@ -82,19 +66,13 @@ func TestSubordinateCA(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	keyPEM, err := helpers.ReadBytes("testdata/prime256v1.key")
-	if err != nil {
-		t.Fatal(err)
-	}
-	kp := &fakeKeyProvider{keyPEM}
-
-	rootCAFile, err := initCA("testdata/root_ca.json", kp)
+	rootCAFile, err := initCA("testdata/root_ca.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(rootCAFile)
 
-	subCAFile, err := initCA("testdata/subordinate_ca.json", kp)
+	subCAFile, err := initCA("testdata/subordinate_ca.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,6 +111,18 @@ func TestSubordinateCA(t *testing.T) {
 	rootCert, err := rootCA.Certificate()
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	caPub, err := subCA.PublicKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kpKey, _ := kp.FindKeyPair(caPub)
+
+	a := caPub.(*ecdsa.PublicKey)
+	b := kpKey.Public().(*ecdsa.PublicKey)
+	if a.Curve.Params().Name != b.Curve.Params().Name || a.X.String() != b.X.String() || a.Y.String() != b.Y.String() {
+		t.Fatal("ca public key mismatch")
 	}
 
 	if subCert.Issuer.String() != rootCert.Subject.String() {

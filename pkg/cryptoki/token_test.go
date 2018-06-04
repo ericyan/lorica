@@ -3,11 +3,11 @@ package cryptoki
 import (
 	"testing"
 
-	"github.com/ericyan/lorica/pkg/cryptoki/internal/softhsm2"
+	"github.com/ericyan/lorica/internal/mock"
 )
 
-func TestSoftHSM2(t *testing.T) {
-	hsm, err := softhsm2.Setup()
+func TestToken(t *testing.T) {
+	hsm, err := mock.NewHSM()
 	if err != nil {
 		t.Fatal(err)
 	}

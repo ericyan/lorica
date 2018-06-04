@@ -8,8 +8,8 @@
     "C": "US"
   },
   "key": {
-    "algo": "rsa",
-    "size": 2048
+    "algo": "ecdsa",
+    "size": 256
   },
   "self_sign": false,
   "expiry": "43800h",

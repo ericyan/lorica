@@ -2,34 +2,17 @@ package ca
 
 import (
 	"bytes"
-	"crypto"
 	"testing"
 
-	"github.com/cloudflare/cfssl/helpers"
+	"github.com/ericyan/lorica/internal/mock"
 )
-
-type fakeKeyProvider struct {
-	keyPEM []byte
-}
-
-func (kp *fakeKeyProvider) GenerateKeyPair(label string, algo string, size int) (crypto.Signer, error) {
-	return helpers.ParsePrivateKeyPEM(kp.keyPEM)
-}
-
-func (kp *fakeKeyProvider) FindKeyPair(key crypto.PublicKey) (crypto.Signer, error) {
-	return helpers.ParsePrivateKeyPEM(kp.keyPEM)
-}
 
 func newFakeCA(cfg *Config) (*CertificationAuthority, error) {
 	db, err := openTestingDB()
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := helpers.ReadBytes("testdata/prime256v1.key")
-	if err != nil {
-		return nil, err
-	}
-	kp := &fakeKeyProvider{keyPEM}
+	kp := mock.NewKeyProvider("testdata/")
 	ca := &CertificationAuthority{db, kp, nil}
 
 	if cfg != nil {

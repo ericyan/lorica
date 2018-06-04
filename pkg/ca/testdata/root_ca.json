@@ -7,6 +7,10 @@
     "ST": "CA",
     "C": "US"
   },
+  "key": {
+    "algo": "rsa",
+    "size": 4096
+  },
   "self_sign": true,
   "expiry": "87600h",
   "ca_constraint": {

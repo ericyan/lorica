@@ -1,4 +1,4 @@
-package softhsm2
+package mock
 
 import (
 	"encoding/hex"
@@ -7,11 +7,11 @@ import (
 	"os/exec"
 )
 
-type Instance struct {
+type HSM struct {
 	ModulePath, TokenLabel, PIN, SOPIN, WorkingDir string
 }
 
-func Setup() (*Instance, error) {
+func NewHSM() (*HSM, error) {
 	dir, err := ioutil.TempDir("", "softhsm2")
 	if err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func Setup() (*Instance, error) {
 		return nil, err
 	}
 
-	hsm := &Instance{
+	hsm := &HSM{
 		ModulePath: "/usr/lib/softhsm/libsofthsm2.so",
 		TokenLabel: "lorica_test",
 		PIN:        "123456",
@@ -39,23 +39,23 @@ func Setup() (*Instance, error) {
 	return hsm, nil
 }
 
-func (hsm *Instance) exec(args ...string) error {
+func (hsm *HSM) exec(args ...string) error {
 	cmd := exec.Command("softhsm2-util", args...)
 	cmd.Env = []string{"SOFTHSM2_CONF=" + hsm.WorkingDir + "/softhsm2.conf"}
 
 	return cmd.Run()
 }
 
-func (hsm *Instance) initToken() error {
+func (hsm *HSM) initToken() error {
 	return hsm.exec("--init-token", "--free", "--label", hsm.TokenLabel, "--so-pin", hsm.SOPIN, "--pin", hsm.PIN)
 }
 
-func (hsm *Instance) Import(key, label string) error {
+func (hsm *HSM) Import(key, label string) error {
 	id := hex.EncodeToString([]byte(label))
 
 	return hsm.exec("--import", key, "--token", hsm.TokenLabel, "--pin", hsm.PIN, "--label", label, "--id", id)
 }
 
-func (hsm *Instance) Destroy() error {
+func (hsm *HSM) Destroy() error {
 	return os.RemoveAll(hsm.WorkingDir)
 }
