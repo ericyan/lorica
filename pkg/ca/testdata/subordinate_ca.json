@@ -1,0 +1,20 @@
+{
+  "CN": "Pied Piper Subordinate CA",
+  "name": {
+    "OU": "Certification Authority",
+    "O": "Pied Piper",
+    "L": "Silicon Valley",
+    "ST": "CA",
+    "C": "US"
+  },
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "self_sign": false,
+  "expiry": "43800h",
+  "ca_constraint": {
+    "is_ca": false
+  },
+  "ca_file": "testdata/subordinate.ca"
+}
