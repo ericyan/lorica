@@ -41,8 +41,8 @@ type CertificationAuthority struct {
 }
 
 // Init creates a CA with given config.
-func Init(cfg *Config, kp KeyProvider) (*CertificationAuthority, error) {
-	db, err := openDB(cfg.CAFile)
+func Init(cfg *Config, caFile string, kp KeyProvider) (*CertificationAuthority, error) {
+	db, err := openDB(caFile)
 	if err != nil {
 		return nil, err
 	}

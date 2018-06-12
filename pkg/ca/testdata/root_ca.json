@@ -15,6 +15,5 @@
   "expiry": "87600h",
   "ca_constraint": {
     "is_ca": true
-  },
-  "ca_file": "testdata/root.ca"
+  }
 }

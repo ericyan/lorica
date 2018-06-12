@@ -15,6 +15,5 @@
   "expiry": "43800h",
   "ca_constraint": {
     "is_ca": false
-  },
-  "ca_file": "testdata/subordinate.ca"
+  }
 }

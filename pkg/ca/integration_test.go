@@ -13,23 +13,18 @@ import (
 
 var kp = mock.NewKeyProvider("testdata/")
 
-func initCA(configFile string) (string, error) {
+func initCA(configFile, caFile string) (*ca.CertificationAuthority, error) {
 	config, err := ioutil.ReadFile(configFile)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	cfg, err := ca.LoadConfig(config)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	_, err = ca.Init(cfg, kp)
-	if err != nil {
-		return "", err
-	}
-
-	return cfg.CAFile, nil
+	return ca.Init(cfg, caFile, kp)
 }
 
 func TestRootCA(t *testing.T) {
@@ -37,7 +32,13 @@ func TestRootCA(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	caFile, err := initCA("testdata/root_ca.json")
+	f, err := ioutil.TempFile("", "lorica_test.*.ca")
+	if err != nil {
+		t.Fatal(err)
+	}
+	caFile := f.Name()
+
+	_, err = initCA("testdata/root_ca.json", caFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,13 +67,25 @@ func TestSubordinateCA(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	rootCAFile, err := initCA("testdata/root_ca.json")
+	f1, err := ioutil.TempFile("", "lorica_test.*.ca")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootCAFile := f1.Name()
+
+	f2, err := ioutil.TempFile("", "lorica_test.*.ca")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subCAFile := f2.Name()
+
+	_, err = initCA("testdata/root_ca.json", rootCAFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(rootCAFile)
 
-	subCAFile, err := initCA("testdata/subordinate_ca.json")
+	_, err = initCA("testdata/subordinate_ca.json", subCAFile)
 	if err != nil {
 		t.Fatal(err)
 	}

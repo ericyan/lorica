@@ -18,7 +18,7 @@ import (
 
 var (
 	app     = kingpin.New("lorica", "A command-line tool for operating a certification authority.")
-	caFile  = app.Flag("ca", "path to CA database").String()
+	caFile  = app.Flag("ca", "path to CA database").Default("lorica.ca").String()
 	verbose = app.Flag("verbose", "increase verbosity").Bool()
 
 	infoCmd = app.Command("info", "Show infomation about the PKCS #11 token.")
@@ -78,7 +78,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		ca, err := ca.Init(cfg, tk)
+		ca, err := ca.Init(cfg, *caFile, tk)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -21,8 +21,7 @@ type Config struct {
 	CAConstraint      config.CAConstraint `json:"ca_constraint"`
 	AllowedExtensions []config.OID        `json:"allowed_extensions"`
 
-	SelfSign bool   `json:"self_sign"`
-	CAFile   string `json:"ca_file"`
+	SelfSign bool `json:"self_sign"`
 }
 
 // DefaultConfig defines the default configuration for a CA.
