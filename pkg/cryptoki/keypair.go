@@ -78,6 +78,19 @@ func (tk *Token) FindKeyPair(key crypto.PublicKey) (crypto.Signer, error) {
 
 // Public returns the public key of the key pair.
 func (kp *KeyPair) Public() crypto.PublicKey {
+	type cryptoKey interface {
+		CryptoKey() (crypto.PublicKey, error)
+	}
+
+	if pub, ok := kp.pub.(cryptoKey); ok {
+		key, err := pub.CryptoKey()
+		if err != nil {
+			panic(err)
+		}
+
+		return key
+	}
+
 	return kp.pub
 }
 
@@ -96,7 +109,7 @@ func (kp *KeyPair) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (
 	}
 
 	var mech uint
-	switch kp.pub.(type) {
+	switch kp.Public().(type) {
 	case *rsa.PublicKey:
 		if _, ok := opts.(*rsa.PSSOptions); ok {
 			mech = pkcs11.CKM_RSA_PKCS_PSS
