@@ -76,7 +76,7 @@ func Open(caFile string, kp KeyProvider) (*CertificationAuthority, error) {
 	}
 	ca := &CertificationAuthority{db, kp, nil}
 
-	err = ca.initSigner(nil)
+	err = ca.initSigner()
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (ca *CertificationAuthority) init(req *csr.CertificateRequest, policy *conf
 		return err
 	}
 
-	err = ca.initSigner(nil)
+	err = ca.initSigner()
 	if err != nil {
 		return err
 	}
@@ -118,28 +118,14 @@ func (ca *CertificationAuthority) init(req *csr.CertificateRequest, policy *conf
 	return nil
 }
 
-// initSigner initializes a new signer for the CA. If the CA does not
-// have a certificate yet, set cert to nil.
-func (ca *CertificationAuthority) initSigner(cert *x509.Certificate) error {
-	if caCert, _ := ca.Certificate(); cert == nil && caCert != nil {
-		cert = caCert
-	}
-
-	var pub crypto.PublicKey
-	if cert != nil {
-		pub = cert.PublicKey
-	} else {
-		var err error
-		pub, err = ca.PublicKey()
-		if err != nil {
-			return err
-		}
-	}
-
-	key, err := ca.kp.FindKeyPair(pub)
+// initSigner initializes a new signer for the CA.
+func (ca *CertificationAuthority) initSigner() error {
+	key, err := ca.privateKey()
 	if err != nil {
 		return err
 	}
+
+	cert, _ := ca.Certificate()
 
 	policy, err := ca.Policy()
 	if err != nil {
@@ -194,7 +180,7 @@ func (ca *CertificationAuthority) ImportCertificate(certPEM []byte) error {
 		return errors.New("ca cert exists")
 	}
 
-	cert, err := helpers.ParseCertificatePEM(certPEM)
+	_, err := helpers.ParseCertificatePEM(certPEM)
 	if err != nil {
 		return err
 	}
@@ -206,7 +192,7 @@ func (ca *CertificationAuthority) ImportCertificate(certPEM []byte) error {
 		return err
 	}
 
-	return ca.initSigner(cert)
+	return ca.initSigner()
 }
 
 // CertificateRequest returns the certificate signing request of the CA.
@@ -236,6 +222,16 @@ func (ca *CertificationAuthority) PublicKey() (crypto.PublicKey, error) {
 	}
 
 	return nil, errors.New("no valid csr in db")
+}
+
+// privateKey returns the private key as a crypto.Signer.
+func (ca *CertificationAuthority) privateKey() (crypto.Signer, error) {
+	pub, err := ca.PublicKey()
+	if err != nil {
+		return nil, err
+	}
+
+	return ca.kp.FindKeyPair(pub)
 }
 
 // KeyID returns the identifier of the signing key, which will also be
@@ -355,11 +351,6 @@ func (ca *CertificationAuthority) Revoke(serial string, reasonCode int) error {
 
 // CRL returns a DER-encoded Certificate Revocation List, signed by the CA.
 func (ca *CertificationAuthority) CRL(ttl time.Duration) ([]byte, error) {
-	cert, err := ca.Certificate()
-	if err != nil {
-		return nil, err
-	}
-
 	certs, err := ca.sp.Accessor().GetRevokedAndUnexpiredCertificates()
 	if err != nil {
 		return nil, err
@@ -377,5 +368,15 @@ func (ca *CertificationAuthority) CRL(ttl time.Duration) ([]byte, error) {
 		revokedCerts = append(revokedCerts, revokedCert)
 	}
 
-	return cert.CreateCRL(rand.Reader, ca.signer, revokedCerts, time.Now(), time.Now().Add(ttl))
+	cert, err := ca.Certificate()
+	if err != nil {
+		return nil, err
+	}
+
+	key, err := ca.privateKey()
+	if err != nil {
+		return nil, err
+	}
+
+	return cert.CreateCRL(rand.Reader, key, revokedCerts, time.Now(), time.Now().Add(ttl))
 }
