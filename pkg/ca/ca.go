@@ -341,10 +341,15 @@ func (ca *CertificationAuthority) Issue(csrPEM []byte) ([]byte, error) {
 	return ca.signer.Sign(req)
 }
 
-// Revoke marks the certificate identified by its serial number and
-// authority key identifier revoked. The reasonCode is defined in
-// RFC 5280 5.3.1.
-func (ca *CertificationAuthority) Revoke(serial, aki string, reasonCode int) error {
+// Revoke marks the certificate identified by its serial number revoked.
+// The reasonCode is defined in RFC 5280 5.3.1.
+func (ca *CertificationAuthority) Revoke(serial string, reasonCode int) error {
+	keyID, err := ca.KeyID()
+	if err != nil {
+		return err
+	}
+	aki := hex.EncodeToString(keyID)
+
 	return ca.sp.Accessor().RevokeCertificate(serial, aki, reasonCode)
 }
 

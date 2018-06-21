@@ -136,12 +136,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		keyID, err := ca.KeyID()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = ca.Revoke(*revokeSerial, string(keyID), *revokeReason)
+		err = ca.Revoke(*revokeSerial, *revokeReason)
 		if err != nil {
 			log.Fatal(err)
 		}
