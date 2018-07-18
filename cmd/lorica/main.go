@@ -28,6 +28,10 @@ var (
 	initCSR  = initCmd.Flag("export-csr", "export CA CSR to file").PlaceHolder("FILE").String()
 	initCert = initCmd.Flag("export-cert", "export CA certificate to file").PlaceHolder("FILE").String()
 
+	certCmd    = app.Command("cert", "Export/import the CA certificate.")
+	certFile   = certCmd.Arg("file", "filename for CRL").Default("/dev/stdout").String()
+	certImport = certCmd.Flag("import", "import the CA certificate from <file>").Bool()
+
 	issueCmd  = app.Command("issue", "Issue a certificate.")
 	issueCSR  = issueCmd.Arg("csr", "path to CSR file (must be PEM-encoded)").Required().String()
 	issueCert = issueCmd.Flag("export-cert", "export issued certificate to file").PlaceHolder("FILE").String()
@@ -107,6 +111,32 @@ func main() {
 			}
 
 			err = cliutil.WriteFile(*initCert, cert)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	case certCmd.FullCommand():
+		ca, err := ca.Open(*caFile, tk)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if *certImport {
+			certPEM, err := cliutil.ReadFile(*certFile)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			err = ca.ImportCertificate(certPEM)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			certPEM, err := ca.CertificatePEM()
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = cliutil.WriteFile(*certFile, certPEM)
 			if err != nil {
 				log.Fatal(err)
 			}
