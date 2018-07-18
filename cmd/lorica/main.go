@@ -18,22 +18,22 @@ import (
 
 var (
 	app     = kingpin.New("lorica", "A command-line tool for operating a certification authority.")
-	caFile  = app.Flag("ca", "path to CA database").Default("lorica.ca").String()
-	verbose = app.Flag("verbose", "increase verbosity").Bool()
+	caFile  = app.Flag("ca-file", "path to CA database").Default("lorica.ca").Short('f').String()
+	verbose = app.Flag("verbose", "increase verbosity").Short('v').Bool()
 
 	infoCmd = app.Command("info", "Show infomation about the PKCS #11 token.")
 
 	initCmd  = app.Command("init", "Initialize a certification authority.")
 	initCfg  = initCmd.Arg("config", "path to configuration file").Required().String()
-	initCSR  = initCmd.Flag("csr", "output filename for CA CSR").String()
-	initCert = initCmd.Flag("cert", "output filename for CA certificate").String()
+	initCSR  = initCmd.Flag("export-csr", "export CA CSR to file").PlaceHolder("FILE").String()
+	initCert = initCmd.Flag("export-cert", "export CA certificate to file").PlaceHolder("FILE").String()
 
 	issueCmd  = app.Command("issue", "Issue a certificate.")
 	issueCSR  = issueCmd.Arg("csr", "path to CSR file (must be PEM-encoded)").Required().String()
-	issueCert = issueCmd.Flag("cert", "output filename for issued certificate").String()
+	issueCert = issueCmd.Flag("export-cert", "export issued certificate to file").PlaceHolder("FILE").String()
 
 	revokeCmd    = app.Command("revoke", "Revoke a certificate.")
-	revokeSerial = revokeCmd.Arg("serial", "serial number of the certificate to be reovked").Required().String()
+	revokeSerial = revokeCmd.Arg("serial", "serial number of the certificate to be revoked").Required().String()
 	revokeReason = revokeCmd.Arg("reason", "RFC 5280 reason code for revocation").Default("0").Int()
 
 	crlCmd  = app.Command("crl", "Generate a new Certificate Revocation List.")
@@ -42,6 +42,7 @@ var (
 )
 
 func main() {
+	app.HelpFlag.Short('h')
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	if *verbose {
@@ -126,9 +127,11 @@ func main() {
 			log.Fatal(err)
 		}
 
-		err = cliutil.WriteFile(*issueCert, certPEM)
-		if err != nil {
-			log.Fatal(err)
+		if *issueCert != "" {
+			err = cliutil.WriteFile(*issueCert, certPEM)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 	case revokeCmd.FullCommand():
 		ca, err := ca.Open(*caFile, tk)
