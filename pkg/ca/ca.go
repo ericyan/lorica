@@ -165,7 +165,28 @@ func (ca *CertificationAuthority) selfSign() error {
 		return err
 	}
 
-	certPEM, err := ca.Issue(csrPEM)
+	var oidExtensionAuthorityKeyId = config.OID([]int{2, 5, 29, 35})
+
+	keyID, err := ca.KeyID()
+	if err != nil {
+		return err
+	}
+
+	type authKeyId struct {
+		KeyIdentifier []byte `asn1:"tag:0"`
+	}
+	aki, err := asn1.Marshal(authKeyId{keyID})
+	if err != nil {
+		return err
+	}
+
+	akiExt := signer.Extension{
+		ID:       oidExtensionAuthorityKeyId,
+		Critical: false,
+		Value:    hex.EncodeToString(aki),
+	}
+
+	certPEM, err := ca.Issue(csrPEM, akiExt)
 	if err != nil {
 		return err
 	}
@@ -307,31 +328,10 @@ func (ca *CertificationAuthority) SetPolicy(policy *config.Signing) error {
 }
 
 // Issue signs a PEM-encoded CSR and returns the certificate in PEM.
-func (ca *CertificationAuthority) Issue(csrPEM []byte) ([]byte, error) {
-	var oidExtensionAuthorityKeyId = config.OID([]int{2, 5, 29, 35})
-
-	keyID, err := ca.KeyID()
-	if err != nil {
-		return nil, err
-	}
-
-	type authKeyId struct {
-		KeyIdentifier []byte `asn1:"tag:0"`
-	}
-	aki, err := asn1.Marshal(authKeyId{keyID})
-	if err != nil {
-		return nil, err
-	}
-
+func (ca *CertificationAuthority) Issue(csrPEM []byte, exts ...signer.Extension) ([]byte, error) {
 	req := signer.SignRequest{
-		Request: string(csrPEM),
-		Extensions: []signer.Extension{
-			signer.Extension{
-				ID:       oidExtensionAuthorityKeyId,
-				Critical: false,
-				Value:    hex.EncodeToString(aki),
-			},
-		},
+		Request:    string(csrPEM),
+		Extensions: exts,
 	}
 
 	return ca.signer.Sign(req)
