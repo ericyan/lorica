@@ -102,7 +102,7 @@ $ lorica cert -f root.ca | openssl x509 -noout -text
 
 ### Set up the Subordinate CA
 
-Similarly, prepare a configuration for the Subordinate CA. Not that we
+Similarly, prepare a configuration for the Subordinate CA. Note that we
 have `self_sign` set to false:
 
 ```json

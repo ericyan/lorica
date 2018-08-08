@@ -21,7 +21,7 @@ var (
 	caFile  = app.Flag("ca-file", "path to CA database").Default("lorica.ca").Short('f').String()
 	verbose = app.Flag("verbose", "increase verbosity").Short('v').Bool()
 
-	infoCmd = app.Command("info", "Show infomation about the PKCS #11 token.")
+	infoCmd = app.Command("info", "Show information about the PKCS #11 token.")
 
 	initCmd  = app.Command("init", "Initialize a certification authority.")
 	initCfg  = initCmd.Arg("config", "path to configuration file").Required().String()
